@@ -1,34 +1,11 @@
 'use strict';
 
-/**
- * EvidenceEngine 단위 테스트
- * ────────────────────────────────────────────────
- * 완료 조건 15개를 각각 검증합니다.
- *
- *  01. evidence 생성
- *  02. 필수 필드 검증
- *  03. trust_score 0~1 범위 강제
- *  04. 잘못된 source_type 거부
- *  05. expiration 처리
- *  06. freshness 계산
- *  07. 동일 subject/claim 증거 결합
- *  08. corroborating evidence 신뢰도 반영
- *  09. contradicting evidence 표시
- *  10. provenance 보존
- *  11. 외부 객체 mutation 차단
- *  12. AI inference와 verified source 구분
- *  13. biometric assertion에는 raw biometric data 저장 금지
- *  14. 최소 공개 원칙 위반 데이터 감지 기반 마련
- *  15. 모든 테스트 PASS
- * ────────────────────────────────────────────────
- */
-
 const {
   EvidenceEngine,
-  normalizeEvidence,
-  containsBiometricRaw,
+  SOURCE_TYPES,
+  AI_INFERENCE_TRUST_CAP,
+  containsRawBiometricMaterial,
 } = require('../core/evidence-engine.cjs');
-const { SOURCE_TYPE } = require('../core/constants.cjs');
 
 let passed = 0;
 let failed = 0;
@@ -43,347 +20,479 @@ function assert(condition, label) {
   }
 }
 
-function throws(fn, label) {
-  try { fn(); assert(false, label + ' (should have thrown)'); }
-  catch { assert(true, label); }
+function assertThrows(fn, label) {
+  try {
+    fn();
+    failed++;
+    console.error(`  ❌ FAIL: ${label}`);
+  } catch {
+    passed++;
+    console.log(`  ✅ ${label}`);
+  }
 }
-
-// ─────────────────────────────────────────────
 
 console.log('\n═══ EvidenceEngine Tests ═══\n');
 
-// ── 01. evidence 생성 ───────────────────────
-console.log('▸ TC-01: evidence 생성');
+console.log('▸ TC-1: evidence 생성');
 {
   const engine = new EvidenceEngine();
-  const ev = engine.collect({
-    source: 'dosirak-api',
-    source_type: SOURCE_TYPE.PLATFORM_API,
-    claim: 'order_count',
-    observed_value: 42,
-    trust_score: 0.9,
-    subject: 'dosirak-store',
-  });
-  assert(ev.id.startsWith('ev_'), 'id가 ev_ 접두사');
-  assert(ev.source === 'dosirak-api', 'source 보존');
-  assert(ev.observed_value === 42, 'observed_value 보존');
-  assert(ev.collected_at !== undefined, 'collected_at 생성');
-}
 
-// ── 02. 필수 필드 검증 ──────────────────────
-console.log('▸ TC-02: 필수 필드 검증');
-{
-  throws(() => normalizeEvidence({}), 'source 누락 시 거부');
-  throws(() => normalizeEvidence({ source: 'x' }), 'source_type 누락 시 거부');
-  throws(() => normalizeEvidence({
-    source: 'x', source_type: SOURCE_TYPE.DEVICE
-  }), 'claim 누락 시 거부');
-  throws(() => normalizeEvidence({
-    source: 'x', source_type: SOURCE_TYPE.DEVICE, claim: 'c'
-  }), 'observed_value 누락 시 거부');
-  throws(() => normalizeEvidence({
-    source: 'x', source_type: SOURCE_TYPE.DEVICE, claim: 'c',
+  const ev = engine.collect({
+    subject: 'call:001',
+    source: 'device',
+    source_type: SOURCE_TYPES.DEVICE,
+    claim: 'incoming_call',
     observed_value: true,
-  }), 'trust_score 누락 시 거부');
+  });
+
+  assert(typeof ev.id === 'string', 'id 생성');
+  assert(ev.subject === 'call:001', 'subject 저장');
+  assert(ev.claim === 'incoming_call', 'claim 저장');
 }
 
-// ── 03. trust_score 0~1 범위 강제 ───────────
-console.log('▸ TC-03: trust_score 0~1 범위 강제');
-{
-  throws(() => normalizeEvidence({
-    source: 'x', source_type: SOURCE_TYPE.DEVICE,
-    claim: 'c', observed_value: 1, trust_score: 1.5,
-  }), 'trust_score > 1.0 거부');
-
-  throws(() => normalizeEvidence({
-    source: 'x', source_type: SOURCE_TYPE.DEVICE,
-    claim: 'c', observed_value: 1, trust_score: -0.1,
-  }), 'trust_score < 0.0 거부');
-
-  const ev = normalizeEvidence({
-    source: 'x', source_type: SOURCE_TYPE.DEVICE,
-    claim: 'c', observed_value: 1, trust_score: 0.555,
-  });
-  assert(ev.trust_score === 0.555, 'trust_score 0.555 허용');
-
-  const evZero = normalizeEvidence({
-    source: 'x', source_type: SOURCE_TYPE.DEVICE,
-    claim: 'c', observed_value: 1, trust_score: 0,
-  });
-  assert(evZero.trust_score === 0, 'trust_score 0 허용');
-
-  const evOne = normalizeEvidence({
-    source: 'x', source_type: SOURCE_TYPE.DEVICE,
-    claim: 'c', observed_value: 1, trust_score: 1,
-  });
-  assert(evOne.trust_score === 1, 'trust_score 1 허용');
-}
-
-// ── 04. 잘못된 source_type 거부 ─────────────
-console.log('▸ TC-04: 잘못된 source_type 거부');
-{
-  throws(() => normalizeEvidence({
-    source: 'x', source_type: 'MAGIC_ORACLE',
-    claim: 'c', observed_value: 1, trust_score: 0.5,
-  }), 'MAGIC_ORACLE 거부');
-
-  throws(() => normalizeEvidence({
-    source: 'x', source_type: '',
-    claim: 'c', observed_value: 1, trust_score: 0.5,
-  }), '빈 문자열 거부');
-}
-
-// ── 05. expiration 처리 ─────────────────────
-console.log('▸ TC-05: expiration 처리');
+console.log('▸ TC-2: 필수 필드 검증');
 {
   const engine = new EvidenceEngine();
-  const past = new Date(Date.now() - 60000).toISOString(); // 1분 전
-  const future = new Date(Date.now() + 3600000).toISOString(); // 1시간 후
 
-  engine.collect({
-    source: 'x', source_type: SOURCE_TYPE.DEVICE,
-    claim: 'expired_claim', observed_value: true, trust_score: 0.8,
-    subject: 'test', expires_at: past,
-  });
-  engine.collect({
-    source: 'x', source_type: SOURCE_TYPE.DEVICE,
-    claim: 'valid_claim', observed_value: true, trust_score: 0.8,
-    subject: 'test', expires_at: future,
-  });
+  assertThrows(
+    () =>
+      engine.collect({
+        source_type: SOURCE_TYPES.DEVICE,
+        claim: 'x',
+        observed_value: true,
+      }),
+    'subject 누락 거부'
+  );
 
-  const purged = engine.purgeExpired();
-  assert(purged === 1, '만료된 증거 1건 제거');
-
-  const remaining = engine.list({ excludeExpired: true });
-  assert(remaining.length === 1, '유효한 증거 1건만 남음');
-  assert(remaining[0].claim === 'valid_claim', '유효한 claim 확인');
+  assertThrows(
+    () =>
+      engine.collect({
+        subject: 'x',
+        source_type: SOURCE_TYPES.DEVICE,
+        observed_value: true,
+      }),
+    'claim 누락 거부'
+  );
 }
 
-// ── 06. freshness 계산 ──────────────────────
-console.log('▸ TC-06: freshness 계산');
+console.log('▸ TC-3: trust_score 범위');
 {
   const engine = new EvidenceEngine();
+
+  assertThrows(
+    () =>
+      engine.collect({
+        subject: 'x',
+        source_type: SOURCE_TYPES.DEVICE,
+        claim: 'x',
+        observed_value: true,
+        trust_score: 1.1,
+      }),
+    '1 초과 trust_score 거부'
+  );
+
+  assertThrows(
+    () =>
+      engine.collect({
+        subject: 'x',
+        source_type: SOURCE_TYPES.DEVICE,
+        claim: 'x',
+        observed_value: true,
+        trust_score: -0.1,
+      }),
+    '0 미만 trust_score 거부'
+  );
+}
+
+console.log('▸ TC-4: 잘못된 source_type 거부');
+{
+  const engine = new EvidenceEngine();
+
+  assertThrows(
+    () =>
+      engine.collect({
+        subject: 'x',
+        source_type: 'UNKNOWN',
+        claim: 'x',
+        observed_value: true,
+      }),
+    '알 수 없는 source_type 거부'
+  );
+}
+
+console.log('▸ TC-5: expiration');
+{
+  const engine = new EvidenceEngine();
+
   const ev = engine.collect({
-    source: 'x', source_type: SOURCE_TYPE.SENSOR,
-    claim: 'temperature', observed_value: 23.5, trust_score: 0.95,
-    subject: 'office',
+    subject: 'x',
+    source_type: SOURCE_TYPES.DEVICE,
+    claim: 'x',
+    observed_value: true,
+    collected_at: '2026-01-01T00:00:00.000Z',
+    expires_at: '2026-01-01T00:10:00.000Z',
   });
-  assert(typeof ev.freshness === 'number', 'freshness는 number');
-  assert(ev.freshness >= 0, 'freshness >= 0');
+
+  assert(
+    engine.isExpired(ev, new Date('2026-01-01T00:05:00.000Z')) === false,
+    '만료 전 false'
+  );
+
+  assert(
+    engine.isExpired(ev, new Date('2026-01-01T00:11:00.000Z')) === true,
+    '만료 후 true'
+  );
 }
 
-// ── 07. 동일 subject/claim 증거 결합 ────────
-console.log('▸ TC-07: 동일 subject/claim 증거 결합 (collectAndRelate)');
+console.log('▸ TC-6: freshness');
 {
   const engine = new EvidenceEngine();
-  const r1 = engine.collectAndRelate({
-    source: 'api-a', source_type: SOURCE_TYPE.PLATFORM_API,
-    claim: 'order_count', observed_value: 100, trust_score: 0.9,
-    subject: 'dosirak',
+
+  const ev = engine.collect({
+    subject: 'x',
+    source_type: SOURCE_TYPES.DEVICE,
+    claim: 'x',
+    observed_value: true,
+    collected_at: '2026-01-01T00:00:00.000Z',
+    expires_at: '2026-01-01T01:00:00.000Z',
   });
-  const r2 = engine.collectAndRelate({
-    source: 'api-b', source_type: SOURCE_TYPE.PLATFORM_API,
-    claim: 'order_count', observed_value: 100, trust_score: 0.85,
-    subject: 'dosirak',
-  });
-  assert(r2.relations.corroborated.length === 1, '보강 관계 1건 감지');
-  assert(r2.merged.corroboration.includes(r1.merged.id), '새 증거에 기존 증거 ID 보강');
+
+  const fresh = engine.freshness(
+    ev,
+    new Date('2026-01-01T00:30:00.000Z')
+  );
+
+  assert(
+    fresh > 0.49 && fresh < 0.51,
+    '중간 시점 freshness 약 0.5'
+  );
 }
 
-// ── 08. corroborating evidence 신뢰도 반영 ──
-console.log('▸ TC-08: corroborating evidence 신뢰도 반영');
+console.log('▸ TC-7: 동일 subject/claim 결합');
 {
   const engine = new EvidenceEngine();
-  const r1 = engine.collectAndRelate({
-    source: 'api-a', source_type: SOURCE_TYPE.PLATFORM_API,
-    claim: 'active_vendors', observed_value: 50, trust_score: 0.8,
-    subject: 'dosirak',
-  });
-  const originalScore = r1.merged.trust_score;
 
-  engine.collectAndRelate({
-    source: 'api-b', source_type: SOURCE_TYPE.INSTITUTION,
-    claim: 'active_vendors', observed_value: 50, trust_score: 0.9,
-    subject: 'dosirak',
+  engine.collect({
+    subject: 'call:1',
+    source_type: SOURCE_TYPES.DEVICE,
+    claim: 'trusted',
+    observed_value: true,
   });
 
-  const updated = engine.get(r1.merged.id);
-  assert(updated.trust_score > originalScore, '보강 시 기존 증거 trust_score 상승');
-  assert(updated.trust_score <= 1.0, 'trust_score 최대 1.0');
+  engine.collect({
+    subject: 'call:1',
+    source_type: SOURCE_TYPES.PLATFORM_API,
+    claim: 'trusted',
+    observed_value: true,
+  });
+
+  const list = engine.findBySubjectClaim('call:1', 'trusted');
+
+  assert(list.length === 2, '동일 subject/claim 2개 조회');
 }
 
-// ── 09. contradicting evidence 표시 ─────────
-console.log('▸ TC-09: contradicting evidence 표시');
+console.log('▸ TC-8: corroborating evidence');
 {
   const engine = new EvidenceEngine();
-  const r1 = engine.collectAndRelate({
-    source: 'api-a', source_type: SOURCE_TYPE.PLATFORM_API,
-    claim: 'is_fraud', observed_value: false, trust_score: 0.7,
-    subject: 'call-123',
-  });
-  const r2 = engine.collectAndRelate({
-    source: 'police-db', source_type: SOURCE_TYPE.INSTITUTION,
-    claim: 'is_fraud', observed_value: true, trust_score: 0.95,
-    subject: 'call-123',
-  });
-  assert(r2.relations.contradicted.length === 1, '모순 관계 1건 감지');
-  assert(r2.merged.contradiction.includes(r1.merged.id), '새 증거에 모순 ID 기록');
 
-  const prev = engine.get(r1.merged.id);
-  assert(prev.contradiction.includes(r2.merged.id), '기존 증거에도 모순 ID 기록');
+  engine.collect({
+    subject: 'call:1',
+    source_type: SOURCE_TYPES.DEVICE,
+    claim: 'trusted',
+    observed_value: true,
+    trust_score: 0.8,
+  });
+
+  engine.collect({
+    subject: 'call:1',
+    source_type: SOURCE_TYPES.PLATFORM_API,
+    claim: 'trusted',
+    observed_value: true,
+    trust_score: 0.9,
+  });
+
+  const relation = engine.evaluateRelation('call:1', 'trusted');
+
+  assert(relation.groups.length === 1, '동일 값 하나의 그룹');
+  assert(relation.strongest.evidence.length === 2, '2개 증거 보강');
 }
 
-// ── 10. provenance 보존 ─────────────────────
+console.log('▸ TC-9: contradiction 감지');
+{
+  const engine = new EvidenceEngine();
+
+  engine.collect({
+    subject: 'call:1',
+    source_type: SOURCE_TYPES.USER_STATEMENT,
+    claim: 'trusted',
+    observed_value: true,
+  });
+
+  engine.collect({
+    subject: 'call:1',
+    source_type: SOURCE_TYPES.INSTITUTION,
+    claim: 'trusted',
+    observed_value: false,
+  });
+
+  const relation = engine.evaluateRelation('call:1', 'trusted');
+
+  assert(relation.has_contradiction === true, '충돌 감지');
+  assert(relation.groups.length === 2, '상반된 값 2개 그룹');
+}
+
 console.log('▸ TC-10: provenance 보존');
 {
   const engine = new EvidenceEngine();
-  const prov = { api_version: '2.1', endpoint: '/api/orders', request_id: 'req-abc' };
-  const ev = engine.collect({
-    source: 'dosirak-api', source_type: SOURCE_TYPE.PLATFORM_API,
-    claim: 'snapshot', observed_value: { orders: 10 }, trust_score: 0.9,
-    provenance: prov,
-  });
-  assert(ev.provenance !== null, 'provenance가 보존됨');
-  assert(ev.provenance.api_version === '2.1', 'provenance 내용 일치');
-  assert(ev.provenance.request_id === 'req-abc', 'provenance request_id 일치');
 
-  // 원본 변경이 저장된 값에 영향 없음
-  prov.api_version = '9.9';
-  const stored = engine.get(ev.id);
-  assert(stored.provenance.api_version === '2.1', 'provenance 격리');
+  const ev = engine.collect({
+    subject: 'x',
+    source_type: SOURCE_TYPES.PLATFORM_API,
+    source: 'MJN',
+    claim: 'payment_status',
+    observed_value: 'paid',
+    provenance: {
+      endpoint: '/payments/1',
+      request_id: 'req-1',
+    },
+  });
+
+  assert(ev.provenance.endpoint === '/payments/1', 'endpoint 보존');
+  assert(ev.provenance.request_id === 'req-1', 'request_id 보존');
 }
 
-// ── 11. 외부 객체 mutation 차단 ─────────────
 console.log('▸ TC-11: 외부 객체 mutation 차단');
 {
   const engine = new EvidenceEngine();
-  const input = {
-    source: 'x', source_type: SOURCE_TYPE.DEVICE,
-    claim: 'status', observed_value: { active: true }, trust_score: 0.8,
-    subject: 'p1',
-  };
-  const ev = engine.collect(input);
 
-  // 입력 원본 변경
-  input.observed_value.active = false;
+  const metadata = { nested: { value: 1 } };
+
+  const ev = engine.collect({
+    subject: 'x',
+    source_type: SOURCE_TYPES.DEVICE,
+    claim: 'x',
+    observed_value: true,
+    metadata,
+  });
+
+  metadata.nested.value = 999;
+
   const stored = engine.get(ev.id);
-  assert(stored.observed_value.active === true, '입력 원본 변경 후에도 stored 보존');
 
-  // 반환값 변경
-  ev.trust_score = 0;
-  const stored2 = engine.get(ev.id);
-  assert(stored2.trust_score === 0.8, '반환값 변경도 stored에 영향 없음');
+  assert(
+    stored.metadata.nested.value === 1,
+    '입력 객체 변경이 저장값을 오염시키지 않음'
+  );
+
+  stored.metadata.nested.value = 888;
+
+  const storedAgain = engine.get(ev.id);
+
+  assert(
+    storedAgain.metadata.nested.value === 1,
+    '반환 객체 변경도 저장값에 영향 없음'
+  );
 }
 
-// ── 12. AI inference와 verified source 구분 ──
 console.log('▸ TC-12: AI inference와 verified source 구분');
 {
   const engine = new EvidenceEngine();
-  const aiEv = engine.collect({
-    source: 'arkaon-llm', source_type: SOURCE_TYPE.AI_INFERENCE,
-    claim: 'likely_phishing', observed_value: true, trust_score: 0.75,
-    subject: 'call-456',
-  });
-  const instEv = engine.collect({
-    source: 'police-verification-server', source_type: SOURCE_TYPE.INSTITUTION,
-    claim: 'spoofed_number', observed_value: true, trust_score: 0.99,
-    subject: 'call-456',
+
+  const ai = engine.collect({
+    subject: 'call:1',
+    source_type: SOURCE_TYPES.AI_INFERENCE,
+    claim: 'phishing',
+    observed_value: true,
+    trust_score: 0.99,
   });
 
-  assert(engine.isAiInference(aiEv) === true, 'AI_INFERENCE 판별');
-  assert(engine.isAiInference(instEv) === false, 'INSTITUTION은 AI가 아님');
-  assert(engine.isVerifiedSource(instEv) === true, 'INSTITUTION은 verified');
-  assert(engine.isVerifiedSource(aiEv) === false, 'AI_INFERENCE는 verified가 아님');
+  const institution = engine.collect({
+    subject: 'call:1',
+    source_type: SOURCE_TYPES.INSTITUTION,
+    claim: 'phishing',
+    observed_value: true,
+  });
 
-  // ID로도 판별 가능
-  assert(engine.isAiInference(aiEv.id) === true, 'ID로 AI_INFERENCE 판별');
-  assert(engine.isVerifiedSource(instEv.id) === true, 'ID로 verified 판별');
+  assert(
+    ai.trust_score <= AI_INFERENCE_TRUST_CAP,
+    'AI inference trust 상한 적용'
+  );
+
+  assert(ai.verified_source === false, 'AI inference는 verified source 아님');
+
+  assert(
+    institution.verified_source === true,
+    'INSTITUTION은 verified source'
+  );
 }
 
-// ── 13. biometric assertion에 raw biometric data 저장 금지 ──
-console.log('▸ TC-13: biometric raw data 저장 금지 (ADR-001 §3)');
+console.log('▸ TC-13: raw biometric 저장 금지');
 {
   const engine = new EvidenceEngine();
 
-  // 허용: assertion 형태
-  const ok = engine.collect({
-    source: 'device-auth', source_type: SOURCE_TYPE.BIOMETRIC_ASSERTION,
-    claim: 'device_user_present', observed_value: true, trust_score: 0.98,
-    metadata: { authenticator: 'OS_BIOMETRIC' },
-  });
-  assert(ok.id.startsWith('ev_'), 'BIOMETRIC_ASSERTION assertion 형태 허용');
-
-  // 금지: fingerprint_template
-  throws(() => engine.collect({
-    source: 'device', source_type: SOURCE_TYPE.BIOMETRIC_ASSERTION,
-    claim: 'identity', observed_value: true, trust_score: 0.9,
-    fingerprint_template: 'AQID...',
-  }), 'fingerprint_template 포함 시 거부');
-
-  // 금지: face_embedding
-  throws(() => engine.collect({
-    source: 'device', source_type: SOURCE_TYPE.BIOMETRIC_ASSERTION,
-    claim: 'identity', observed_value: true, trust_score: 0.9,
-    metadata: { face_embedding: [0.1, 0.2, 0.3] },
-  }), 'metadata 내 face_embedding 포함 시 거부');
-
-  // 금지: raw_biometric_data (중첩)
-  throws(() => engine.collect({
-    source: 'device', source_type: SOURCE_TYPE.BIOMETRIC_ASSERTION,
-    claim: 'identity', observed_value: { raw_biometric_data: 'binary...' },
-    trust_score: 0.9,
-  }), 'observed_value 내 raw_biometric_data 포함 시 거부');
-
-  // containsBiometricRaw 직접 테스트
-  assert(containsBiometricRaw({ a: { iris_template: 'x' } }) === 'iris_template',
-    'containsBiometricRaw 중첩 탐지');
-  assert(containsBiometricRaw({ safe: true }) === false,
-    'containsBiometricRaw 안전한 객체는 false');
-}
-
-// ── 14. 최소 공개 원칙 위반 데이터 감지 기반 ──
-console.log('▸ TC-14: 최소 공개 원칙 위반 감지 기반');
-{
-  // 현재는 biometric raw field 금지가 기본 방어선.
-  // 향후 PII 감지(주민번호, 카드번호 등)로 확장될 기반.
-  // 지금은 containsBiometricRaw가 확실하게 동작하는지 추가 확인.
-  assert(
-    containsBiometricRaw({ voice_print: 'data' }) === 'voice_print',
-    'voice_print 감지'
+  assertThrows(
+    () =>
+      engine.collect({
+        subject: 'identity:1',
+        source_type: SOURCE_TYPES.BIOMETRIC_ASSERTION,
+        claim: 'device_user_present',
+        observed_value: true,
+        metadata: {
+          fingerprint_template: 'FORBIDDEN',
+        },
+      }),
+    'fingerprint template 거부'
   );
-  assert(
-    containsBiometricRaw({ palm_template: 'data' }) === 'palm_template',
-    'palm_template 감지'
-  );
-  assert(
-    containsBiometricRaw({ nested: { deep: { fingerprint_template: 'x' } } }) === 'fingerprint_template',
-    '3-depth 중첩 fingerprint_template 감지'
+
+  assertThrows(
+    () =>
+      engine.collect({
+        subject: 'identity:1',
+        source_type: SOURCE_TYPES.BIOMETRIC_ASSERTION,
+        claim: 'device_user_present',
+        observed_value: true,
+        metadata: {
+          nested: {
+            face_embedding: [0.1, 0.2],
+          },
+        },
+      }),
+    '중첩 face embedding 거부'
   );
 }
 
-// ── 15. 모든 테스트 PASS (이 항목 자체가 최종 결과) ──
-console.log('▸ TC-15: 전체 결과');
-
-// ── 보너스: list 필터 ───────────────────────
-console.log('▸ Bonus: list 필터');
+console.log('▸ TC-14: biometric assertion은 boolean만 허용');
 {
   const engine = new EvidenceEngine();
-  engine.collect({
-    source: 'a', source_type: SOURCE_TYPE.DEVICE,
-    claim: 'c1', observed_value: 1, trust_score: 0.5, subject: 's1',
+
+  assertThrows(
+    () =>
+      engine.collect({
+        subject: 'identity:1',
+        source_type: SOURCE_TYPES.BIOMETRIC_ASSERTION,
+        claim: 'device_user_present',
+        observed_value: 'yes',
+      }),
+    '문자열 biometric assertion 거부'
+  );
+
+  const ev = engine.collect({
+    subject: 'identity:1',
+    source_type: SOURCE_TYPES.BIOMETRIC_ASSERTION,
+    claim: 'device_user_present',
+    observed_value: true,
   });
-  engine.collect({
-    source: 'b', source_type: SOURCE_TYPE.AI_INFERENCE,
-    claim: 'c2', observed_value: 2, trust_score: 0.6, subject: 's2',
-  });
-  assert(engine.list({ subject: 's1' }).length === 1, 'subject 필터');
-  assert(engine.list({ source_type: SOURCE_TYPE.AI_INFERENCE }).length === 1, 'source_type 필터');
-  assert(engine.list().length === 2, '전체 조회');
+
+  assert(ev.observed_value === true, 'boolean assertion 허용');
 }
 
-// ── 결과 ─────────────────────────────────────
-console.log(`\n═══ Results: ${passed} passed, ${failed} failed ═══\n`);
-if (failed > 0) {
-  console.error('⚠️  일부 테스트 실패');
+console.log('▸ TC-15: minimal disclosure review');
+{
+  const engine = new EvidenceEngine();
+
+  const ev = engine.collect({
+    subject: 'identity:1',
+    source_type: SOURCE_TYPES.IDENTITY_PROVIDER,
+    claim: 'age_over_19',
+    observed_value: true,
+  });
+
+  const allowed = engine.reviewDisclosure(ev, ['age_over_19']);
+
+  assert(allowed.allowed === true, '허용 claim 통과');
+  assert(
+    allowed.minimal_disclosure_required === false,
+    '허용 claim은 추가 최소공개 검토 불필요'
+  );
+
+  const denied = engine.reviewDisclosure(ev, ['real_name_verified']);
+
+  assert(denied.allowed === false, '비허용 claim 차단');
+  assert(
+    denied.minimal_disclosure_required === true,
+    '비허용 claim은 최소공개 검토 필요'
+  );
 }
+
+console.log('▸ Bonus: containsRawBiometricMaterial');
+{
+  assert(
+    containsRawBiometricMaterial({
+      a: {
+        b: {
+          fingerprint_template: 'x',
+        },
+      },
+    }) === true,
+    '깊은 중첩 raw biometric 탐지'
+  );
+
+  assert(
+    containsRawBiometricMaterial({
+      authenticator: 'OS_BIOMETRIC',
+      success: true,
+    }) === false,
+    'OS biometric assertion metadata는 허용'
+  );
+}
+
+console.log('▸ Bonus: 기본 trust score');
+{
+  const engine = new EvidenceEngine();
+
+  const institution = engine.collect({
+    subject: 'x',
+    source_type: SOURCE_TYPES.INSTITUTION,
+    claim: 'x',
+    observed_value: true,
+  });
+
+  const ai = engine.collect({
+    subject: 'x2',
+    source_type: SOURCE_TYPES.AI_INFERENCE,
+    claim: 'x',
+    observed_value: true,
+  });
+
+  assert(
+    institution.trust_score > ai.trust_score,
+    '기관 기본 신뢰도가 AI 추론보다 높음'
+  );
+}
+
+console.log('▸ Bonus: get/list/remove/clear');
+{
+  const engine = new EvidenceEngine();
+
+  const a = engine.collect({
+    subject: 'a',
+    source_type: SOURCE_TYPES.DEVICE,
+    claim: 'x',
+    observed_value: true,
+  });
+
+  const b = engine.collect({
+    subject: 'b',
+    source_type: SOURCE_TYPES.DEVICE,
+    claim: 'y',
+    observed_value: false,
+  });
+
+  assert(engine.get(a.id) !== null, 'get 동작');
+  assert(engine.list().length === 2, 'list 동작');
+
+  engine.remove(a.id);
+
+  assert(engine.get(a.id) === null, 'remove 동작');
+  assert(engine.list().length === 1, 'remove 후 list 반영');
+
+  engine.clear();
+
+  assert(engine.list().length === 0, 'clear 동작');
+}
+
+console.log(
+  `\n═══ Results: ${passed} passed, ${failed} failed ═══\n`
+);
+
 process.exit(failed > 0 ? 1 : 0);
