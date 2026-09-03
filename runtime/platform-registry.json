@@ -1,0 +1,62 @@
+{
+  "version": "1.0",
+  "core": "ARKAON",
+  "platforms": [
+    {
+      "id": "wither",
+      "name": "WITHER",
+      "status": "REGISTERED",
+      "skill_pack": "skills/wither",
+      "connector": "connectors/wither"
+    },
+    {
+      "id": "ailawfriend",
+      "name": "AI법친",
+      "status": "REGISTERED",
+      "skill_pack": "skills/ailawfriend",
+      "connector": "connectors/ailawfriend"
+    },
+    {
+      "id": "dosirak-store",
+      "name": "도시락.store",
+      "status": "REGISTERED",
+      "skill_pack": "skills/dosirak-store",
+      "connector": "connectors/dosirak-store"
+    },
+    {
+      "id": "maejinnam",
+      "name": "매진남",
+      "status": "REGISTERED",
+      "skill_pack": "skills/maejinnam",
+      "connector": "connectors/maejinnam"
+    },
+    {
+      "id": "nuripay",
+      "name": "누리페이",
+      "status": "REGISTERED",
+      "skill_pack": "skills/nuripay",
+      "connector": "connectors/nuripay"
+    },
+    {
+      "id": "honfile",
+      "name": "혼파일",
+      "status": "REGISTERED",
+      "skill_pack": "skills/honfile",
+      "connector": "connectors/honfile"
+    },
+    {
+      "id": "gaon-sejong",
+      "name": "가온세종",
+      "status": "REGISTERED",
+      "skill_pack": "skills/gaon-sejong",
+      "connector": "connectors/gaon-sejong"
+    },
+    {
+      "id": "nogada-news",
+      "name": "노가다뉴스",
+      "status": "REGISTERED",
+      "skill_pack": "skills/nogada-news",
+      "connector": "connectors/nogada-news"
+    }
+  ]
+}

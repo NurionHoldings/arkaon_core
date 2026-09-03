@@ -1,0 +1,10 @@
+{
+  "name": "@nurion/arkaon-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "ARKAON Autonomous Human-AI Operations Intelligence Core",
+  "scripts": {
+    "verify": "node tests/verify-core.cjs"
+  }
+}

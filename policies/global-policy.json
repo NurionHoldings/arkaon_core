@@ -1,0 +1,22 @@
+{
+  "name": "ARKAON Global Human Control Policy",
+  "version": "1.0",
+  "default_authority": "L1_ADVISE",
+  "human_final_control": true,
+  "hard_approval": [
+    "payment_refund",
+    "settlement_finalization",
+    "legal_decision",
+    "account_delete",
+    "bulk_data_delete",
+    "credential_rotation",
+    "privacy_export",
+    "high_value_vendor_change"
+  ],
+  "principles": [
+    "AI prepares work; human owns final policy.",
+    "Every autonomous action must be auditable.",
+    "High-impact actions require approval.",
+    "All executable actions should define rollback when possible."
+  ]
+}

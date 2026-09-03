@@ -1,0 +1,14 @@
+{
+  "platform": "nogada-news",
+  "name": "노가다뉴스",
+  "status": "READY_FOR_SOURCE_BINDING",
+  "authority_default": "L1_ADVISE",
+  "required_components": [
+    "observer",
+    "analyzer",
+    "proposal-builder",
+    "approval-policy",
+    "executor",
+    "verifier"
+  ]
+}

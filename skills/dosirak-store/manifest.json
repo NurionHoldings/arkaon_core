@@ -1,0 +1,43 @@
+{
+  "platform": "dosirak-store",
+  "name": "도시락.store",
+  "status": "ACTIVE_PILOT",
+  "authority_default": "L2_APPROVAL_EXECUTION",
+  "skills": [
+    {
+      "id": "order_delay_risk",
+      "authority": "L2_APPROVAL_EXECUTION",
+      "risk": "MEDIUM"
+    },
+    {
+      "id": "vendor_assignment_suggest",
+      "authority": "L2_APPROVAL_EXECUTION",
+      "risk": "MEDIUM"
+    },
+    {
+      "id": "delivery_recovery",
+      "authority": "L2_APPROVAL_EXECUTION",
+      "risk": "MEDIUM"
+    },
+    {
+      "id": "notification_escalation",
+      "authority": "L3_AUTONOMOUS",
+      "risk": "LOW"
+    },
+    {
+      "id": "pos_printer_recovery",
+      "authority": "L3_AUTONOMOUS",
+      "risk": "LOW"
+    },
+    {
+      "id": "settlement_finalization",
+      "authority": "L2_APPROVAL_EXECUTION",
+      "risk": "HIGH"
+    },
+    {
+      "id": "payment_refund",
+      "authority": "L2_APPROVAL_EXECUTION",
+      "risk": "HIGH"
+    }
+  ]
+}
