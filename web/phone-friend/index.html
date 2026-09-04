@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>ARKAON 폰친구</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="atmosphere" aria-hidden="true"></div>
+
+  <main class="shell">
+    <header class="brand-block">
+      <p class="brand">ARKAON</p>
+      <h1 class="product">폰친구</h1>
+      <p class="tagline">말하면 이해하고, 필요할 때만 확인받고, 안전하게 도와줘요.</p>
+    </header>
+
+    <section class="presence" aria-label="아르카온 상태">
+      <div class="orb" id="orb" data-status="IDLE">
+        <span class="orb-core"></span>
+        <span class="orb-ring"></span>
+      </div>
+      <p class="presence-label" id="presenceLabel">듣고 있어요</p>
+      <p class="presence-status" id="statusBadge">IDLE</p>
+    </section>
+
+    <section class="transcript" id="transcript" aria-live="polite"></section>
+
+    <form class="composer" id="composer">
+      <label class="sr-only" for="utterance">메시지</label>
+      <input
+        id="utterance"
+        name="utterance"
+        type="text"
+        autocomplete="off"
+        placeholder="아르카온에게 말해보세요"
+        required
+      />
+      <button type="submit" id="sendBtn">보내기</button>
+    </form>
+
+    <p class="hint">예: 오늘 일정 알려줘 · 엄마한테 조금 늦는다고 보내줘 · 이 문자 이상한데 봐줘</p>
+  </main>
+
+  <script src="./app.js"></script>
+</body>
+</html>

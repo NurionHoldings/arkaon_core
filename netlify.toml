@@ -1,0 +1,19 @@
+[build]
+  publish = "web/phone-friend"
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "nft"
+
+[[redirects]]
+  from = "/api/phone-friend"
+  to = "/.netlify/functions/phone-friend"
+  status = 200
+  force = true
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"

@@ -1,0 +1,343 @@
+:root {
+  --ink: #142028;
+  --muted: #4d5d68;
+  --paper: #f3f7f8;
+  --foam: #e7f3f4;
+  --sea: #0f6f76;
+  --sea-deep: #0a4f55;
+  --glow: #2bb7a8;
+  --sand: #d9a15c;
+  --danger: #b23b2f;
+  --hold: #b7791f;
+  --ok: #1f7a4c;
+  --line: rgba(20, 32, 40, 0.12);
+  --shadow: 0 18px 50px rgba(10, 40, 48, 0.18);
+  --radius: 22px;
+  --font-display: "Outfit", "IBM Plex Sans KR", sans-serif;
+  --font-body: "IBM Plex Sans KR", "Outfit", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--ink);
+  background: var(--paper);
+  overflow-x: hidden;
+}
+
+.atmosphere {
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 55% at 50% -10%, rgba(43, 183, 168, 0.35), transparent 60%),
+    radial-gradient(ellipse 50% 40% at 90% 20%, rgba(217, 161, 92, 0.22), transparent 55%),
+    linear-gradient(165deg, #dff1f2 0%, #f7f4ee 48%, #e8f0f2 100%);
+  z-index: -1;
+}
+
+.shell {
+  width: min(440px, 100%);
+  margin: 0 auto;
+  min-height: 100vh;
+  padding: 28px 18px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.brand-block {
+  text-align: center;
+  padding-top: 8px;
+}
+
+.brand {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  font-size: 0.78rem;
+  color: var(--sea-deep);
+}
+
+.product {
+  margin: 6px 0 0;
+  font-family: var(--font-display);
+  font-size: clamp(2.2rem, 8vw, 2.8rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.tagline {
+  margin: 10px auto 0;
+  max-width: 28ch;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.presence {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 8px 0 4px;
+}
+
+.orb {
+  position: relative;
+  width: 118px;
+  height: 118px;
+  display: grid;
+  place-items: center;
+}
+
+.orb-core {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 30%, #9ff0e3, var(--glow) 45%, var(--sea-deep));
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.35) inset,
+    0 12px 30px rgba(15, 111, 118, 0.35);
+  animation: breathe 3.6s ease-in-out infinite;
+}
+
+.orb-ring {
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  border: 1px solid rgba(15, 111, 118, 0.28);
+  animation: spinSoft 12s linear infinite;
+}
+
+.orb[data-status="CONFIRM"] .orb-core,
+.orb[data-status="HOLD"] .orb-core {
+  background:
+    radial-gradient(circle at 35% 30%, #ffe2a8, var(--sand) 48%, #8a5a18);
+}
+
+.orb[data-status="WARN"] .orb-core,
+.orb[data-status="DENY"] .orb-core {
+  background:
+    radial-gradient(circle at 35% 30%, #ffc4b8, var(--danger) 50%, #6d2018);
+}
+
+.orb[data-status="COMPLETE"] .orb-core {
+  background:
+    radial-gradient(circle at 35% 30%, #b8f0cf, #3cbc78 50%, #145233);
+}
+
+.presence-label {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.presence-status {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  color: var(--sea);
+}
+
+.transcript {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 180px;
+  max-height: 42vh;
+  overflow-y: auto;
+  padding: 4px 2px 8px;
+}
+
+.bubble {
+  max-width: 92%;
+  padding: 12px 14px;
+  border-radius: 18px;
+  line-height: 1.45;
+  font-size: 0.95rem;
+  animation: rise 0.35s ease both;
+}
+
+.bubble.user {
+  align-self: flex-end;
+  background: var(--sea);
+  color: #fff;
+  border-bottom-right-radius: 6px;
+}
+
+.bubble.assistant {
+  align-self: flex-start;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--line);
+  border-bottom-left-radius: 6px;
+  backdrop-filter: blur(8px);
+}
+
+.card {
+  align-self: stretch;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+  animation: rise 0.4s ease both;
+}
+
+.card h3 {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-size: 1rem;
+}
+
+.card p,
+.card li {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.card ul {
+  margin: 8px 0 0;
+  padding-left: 1.1rem;
+}
+
+.card .risk {
+  display: inline-block;
+  margin-top: 8px;
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  color: var(--danger);
+}
+
+.card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.card-actions button {
+  flex: 1;
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 12px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.card-actions .yes {
+  background: var(--sea);
+  color: #fff;
+}
+
+.card-actions .no {
+  background: var(--foam);
+  color: var(--ink);
+}
+
+.composer {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+}
+
+.composer input {
+  border: 0;
+  background: transparent;
+  padding: 12px 14px;
+  font: inherit;
+  outline: none;
+  min-width: 0;
+}
+
+.composer button {
+  border: 0;
+  border-radius: 999px;
+  padding: 0 18px;
+  background: var(--sea-deep);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.composer button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.hint {
+  margin: 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+@keyframes spinSoft {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 420px) {
+  .shell {
+    padding-bottom: 20px;
+  }
+
+  .transcript {
+    max-height: 38vh;
+  }
+}
