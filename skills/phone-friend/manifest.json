@@ -1,0 +1,19 @@
+{
+  "product": "phone-friend",
+  "name": "PHONE FRIEND",
+  "status": "BOOTSTRAPPED",
+  "layer": "PRODUCT_CAPABILITY",
+  "core_dependency": "ARKAON_CORE",
+  "related_products": ["ARKAON_CALL"],
+  "capabilities": [
+    "FRIEND_CHAT",
+    "CALENDAR",
+    "MESSAGING",
+    "CALL",
+    "SAFETY_GUARD",
+    "DIGITAL_SUPPORT",
+    "LIFE_AGENT",
+    "IMAGE"
+  ],
+  "principle": "Capability never bypasses Core Decision/Gate/ActionRuntime"
+}
