@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ARKAON 폰친구</string>
+    <string name="hint_utterance">아르카온에게 말해보세요</string>
+    <string name="send">보내기</string>
+    <string name="brand">ARKAON</string>
+    <string name="product">폰친구</string>
+    <string name="tagline">말하면 이해하고, 필요할 때만 확인받고, 안전하게 도와줘요.</string>
+</resources>

@@ -11,6 +11,12 @@
   status = 200
   force = true
 
+[[redirects]]
+  from = "/api/phone-friend/device/contact-analyze"
+  to = "/.netlify/functions/phone-friend-contact"
+  status = 200
+  force = true
+
 [[headers]]
   for = "/*"
   [headers.values]
