@@ -501,19 +501,61 @@ class PhoneFriendRuntime {
        * No MERGE / DELETE. No Authority.
        */
       const contactPlan = natural.dialogue_plan || natural.plan;
-      const contactMethodReady =
+      const hasContactMethod =
         natural.goal === 'CONTACT_MAINTENANCE' &&
         contactPlan &&
         contactPlan.slots &&
-        contactPlan.slots.method &&
-        (contactPlan.status === 'READY_FOR_CAPABILITY' ||
-          contactPlan.status === 'WAITING_PERMISSION');
+        contactPlan.slots.method;
 
-      if (contactMethodReady) {
+      /**
+       * Method chosen but READ permission not yet granted:
+       * ask only — do not hit Gate/connector yet.
+       */
+      if (
+        hasContactMethod &&
+        contactPlan.status === 'WAITING_PERMISSION' &&
+        input.permission_ok !== true
+      ) {
+        return this._withProgress(
+          {
+            status: 'WAITING_PERMISSION',
+            executed: false,
+            authority_granted: false,
+            scenario: 'CONTACT_MAINTENANCE',
+            assistant_text:
+              '연락처를 읽으려면 접근 권한이 필요해요.\n허용해주시면 읽기만 해서 후보를 찾아볼게요.\n아직 합치거나 삭제하지 않아요.',
+            dialogue_plan: contactPlan,
+            options: [
+              { id: 'ALLOW', label: '허용' },
+              { id: 'DENY', label: '나중에' },
+            ],
+            mutated: false,
+          },
+          naturalKey,
+          natural.progress || []
+        );
+      }
+
+      const shouldProposeContact =
+        hasContactMethod &&
+        (contactPlan.status === 'READY_FOR_CAPABILITY' ||
+          (contactPlan.status === 'WAITING_PERMISSION' &&
+            input.permission_ok === true));
+
+      if (shouldProposeContact) {
         const method =
           contactPlan.slots.method ||
           (natural.state && natural.state.method) ||
           CONTACT_METHOD.DUPLICATES;
+
+        /**
+         * READY_FOR_CAPABILITY means the user already affirmed
+         * the READ step in dialogue. Web prototype may also pass
+         * permission_ok explicitly (Android OS grant).
+         */
+        const permissionOk =
+          input.permission_ok === true ||
+          contactPlan.status === 'READY_FOR_CAPABILITY';
 
         const proposal = await this.contacts.propose(this.capability, {
           subject,
@@ -523,11 +565,7 @@ class PhoneFriendRuntime {
           idempotency_key:
             input.idempotency_key ||
             `contact-propose:${subject}:${method}`,
-          /**
-           * Web/Memory prototype에서는 true 가능.
-           * 실제 Android에서는 OS permission 결과로 대체.
-           */
-          permission_ok: input.permission_ok === true,
+          permission_ok: permissionOk,
           gate_context: input.gate_context || {},
           now,
         });
@@ -542,36 +580,46 @@ class PhoneFriendRuntime {
 
         return this._withProgress(
           {
-            status: proposal.status,
+            status: needsPermission
+              ? 'WAITING_PERMISSION'
+              : proposal.status,
             executed: proposal.executed === true,
             authority_granted: false,
             scenario: 'CONTACT_MAINTENANCE',
             assistant_text: needsPermission
-              ? '연락처를 읽으려면 접근 권한이 필요해요. 허용해주시면 읽기만 해서 정리 후보를 찾아볼게요. 아직 합치거나 삭제하지 않아요.'
+              ? '연락처를 읽으려면 접근 권한이 필요해요.\n허용해주시면 읽기만 해서 후보를 찾아볼게요.\n아직 합치거나 삭제하지 않아요.'
               : candidateCount > 0
                 ? `${candidateCount}개의 정리 후보를 찾았어요. 아직 합치거나 삭제한 연락처는 없어요.`
                 : '지금 기준으로 정리 후보를 찾지 못했어요. 연락처는 변경하지 않았어요.',
             dialogue_plan: contactPlan,
             contact_result: proposal,
             proposals: proposal.proposals || [],
+            options: needsPermission
+              ? [
+                  { id: 'ALLOW', label: '허용' },
+                  { id: 'DENY', label: '나중에' },
+                ]
+              : null,
             mutated: false,
           },
           naturalKey,
-          [
-            ...(natural.progress || []),
-            this.narrator.narrate(
-              PROGRESS_STAGE.ANALYZING,
-              '연락처의 번호와 이름을 비교하고 있어요.',
-              'done'
-            ),
-            this.narrator.narrate(
-              PROGRESS_STAGE.COMPLETE,
-              candidateCount > 0
-                ? `${candidateCount}개의 후보를 찾았어요. 아직 변경하지 않았어요.`
-                : '분석을 마쳤어요. 연락처는 변경하지 않았어요.',
-              'done'
-            ),
-          ]
+          needsPermission
+            ? natural.progress || []
+            : [
+                ...(natural.progress || []),
+                this.narrator.narrate(
+                  PROGRESS_STAGE.ANALYZING,
+                  '연락처의 번호와 이름을 비교하고 있어요.',
+                  'done'
+                ),
+                this.narrator.narrate(
+                  PROGRESS_STAGE.COMPLETE,
+                  candidateCount > 0
+                    ? `${candidateCount}개의 후보를 찾았어요. 아직 변경하지 않았어요.`
+                    : '분석을 마쳤어요. 연락처는 변경하지 않았어요.',
+                  'done'
+                ),
+              ]
         );
       }
 

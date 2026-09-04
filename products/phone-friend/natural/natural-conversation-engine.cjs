@@ -542,9 +542,8 @@ class NaturalConversationEngine {
         return this._result({
           handled: true,
           goal: NATURAL_GOAL.CONTACT_MAINTENANCE,
-          status: 'ANSWER',
-          assistant_text:
-            '좋아요. 지금은 읽기/비교 계획만 준비해 두었어요.\n실제 연락처 접근은 기기 connector가 연결되면 진행하고, 그때도 합치거나 삭제하기 전에 꼭 다시 확인할게요.',
+          status: 'READY_FOR_CAPABILITY',
+          assistant_text: null,
           plan: createDialoguePlan({
             goal: NATURAL_GOAL.CONTACT_MAINTENANCE,
             capability_candidates: ['CONTACT_READ'],
@@ -557,17 +556,17 @@ class NaturalConversationEngine {
             mutate: false,
             status: PLAN_STATUS.READY_FOR_CAPABILITY,
             notes:
-              'v0.1 boundary: plan ready; no Gate execute / no mutate.',
+              'User affirmed READ. Propose via runtime; no MERGE/DELETE.',
           }),
           progress_seed: [
             {
               stage: PROGRESS_STAGE.CHECKING_PERMISSION,
-              text: '읽기 의사 확인을 받았어요.',
+              text: '읽기 권한 확인을 받았어요.',
               mark: 'done',
             },
             {
               stage: PROGRESS_STAGE.ANALYZING,
-              text: '비교 작업은 connector 연결 후 이어갈게요.',
+              text: '번호와 이름을 비교하고 있어요.',
               mark: 'active',
             },
             {
@@ -576,11 +575,12 @@ class NaturalConversationEngine {
               mark: 'pending',
             },
           ],
-          state: null,
-          /**
-           * Explicit: natural layer does not request Gate execute
-           * for CONTACT_MAINTENANCE in v0.1.
-           */
+          state: {
+            goal: NATURAL_GOAL.CONTACT_MAINTENANCE,
+            step: 'SCAN',
+            method: state.method,
+            permission_granted: true,
+          },
           execute: null,
         });
       }

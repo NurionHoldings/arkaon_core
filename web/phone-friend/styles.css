@@ -310,7 +310,7 @@ body {
 
 .composer {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr auto auto;
   gap: 8px;
   padding: 8px;
   border-radius: 999px;
@@ -337,6 +337,31 @@ body {
   font: inherit;
   font-weight: 600;
   cursor: pointer;
+}
+
+.composer button.mic {
+  background: var(--foam);
+  color: var(--sea-deep);
+  min-width: 72px;
+  animation: mic-nudge 2.4s ease-in-out infinite;
+}
+
+.composer button.mic[aria-pressed="true"] {
+  background: var(--sea);
+  color: #fff;
+  animation: breathe 1.2s ease-in-out infinite;
+}
+
+@keyframes mic-nudge {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(10, 79, 85, 0.2);
+  }
+  50% {
+    transform: scale(1.04);
+    box-shadow: 0 0 0 8px rgba(10, 79, 85, 0);
+  }
 }
 
 .composer button:disabled {

@@ -10,18 +10,21 @@ class PermissionController(
 ) {
 
     fun hasReadContacts(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.READ_CONTACTS
+        ) == PackageManager.PERMISSION_GRANTED
+    }
 
-        return ContextCompat
-            .checkSelfPermission(
-                context,
-                Manifest.permission.READ_CONTACTS
-            ) ==
-            PackageManager.PERMISSION_GRANTED
+    fun hasRecordAudio(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
     }
 
     companion object {
-
-        const val READ_CONTACTS =
-            Manifest.permission.READ_CONTACTS
+        const val READ_CONTACTS = Manifest.permission.READ_CONTACTS
+        const val RECORD_AUDIO = Manifest.permission.RECORD_AUDIO
     }
 }

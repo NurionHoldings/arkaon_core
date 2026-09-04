@@ -5,6 +5,7 @@
   const composer = document.getElementById('composer');
   const input = document.getElementById('utterance');
   const sendBtn = document.getElementById('sendBtn');
+  const micBtn = document.getElementById('micBtn');
   const orb = document.getElementById('orb');
   const presenceLabel = document.getElementById('presenceLabel');
   const statusBadge = document.getElementById('statusBadge');
@@ -12,6 +13,9 @@
 
   let sessionId = null;
   let naturalSessionId = null;
+  let lastUiStatus = 'IDLE';
+  let recognition = null;
+  let listening = false;
 
   const MOOD_COPY = {
     LISTENING: '응, 듣고 있어.',
@@ -21,6 +25,12 @@
     HAPPY: '다 했어.',
     SLEEP: '필요할 때 불러줘.',
   };
+
+  function isPermissionAllow(text) {
+    return /^(허용|응|어|네|예|좋아|허락|ㅇㅇ|ok|okay|그래)(?:요|습니다)?[!~.]*$/i.test(
+      String(text || '').trim()
+    );
+  }
 
   function setPresence(data) {
     const mood = (data && data.character_mood) || 'LISTENING';
@@ -107,17 +117,22 @@
       const actions = document.createElement('div');
       actions.className = 'card-actions';
 
+      const labels =
+        Array.isArray(card.actions) && card.actions.length >= 2
+          ? card.actions
+          : ['응', '아니'];
+
       const yes = document.createElement('button');
       yes.type = 'button';
       yes.className = 'yes';
-      yes.textContent = '응';
-      yes.addEventListener('click', () => sendUtterance('응'));
+      yes.textContent = labels[0];
+      yes.addEventListener('click', () => sendUtterance(labels[0]));
 
       const no = document.createElement('button');
       no.type = 'button';
       no.className = 'no';
-      no.textContent = '아니';
-      no.addEventListener('click', () => sendUtterance('아니'));
+      no.textContent = labels[1];
+      no.addEventListener('click', () => sendUtterance(labels[1]));
 
       actions.append(yes, no);
       el.appendChild(actions);
@@ -202,6 +217,9 @@
     sendBtn.disabled = true;
 
     try {
+      const permissionOk =
+        lastUiStatus === 'CONFIRM' && isPermissionAllow(utterance);
+
       const response = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -211,6 +229,7 @@
           natural_session_id: naturalSessionId,
           subject: 'user:web',
           device_id: 'web-browser',
+          permission_ok: permissionOk || undefined,
         }),
       });
 
@@ -223,6 +242,7 @@
       sessionId = data.session_id || sessionId;
       naturalSessionId =
         data.natural_session_id || naturalSessionId || sessionId;
+      lastUiStatus = data.status || 'ANSWER';
 
       setPresence(data);
       renderProgress(data.progress || []);
@@ -253,9 +273,160 @@
     sendUtterance(value);
   });
 
+  function setListening(active) {
+    listening = active;
+    if (micBtn) {
+      micBtn.setAttribute('aria-pressed', active ? 'true' : 'false');
+      micBtn.textContent = active ? '듣는 중' : '마이크';
+    }
+    if (active) {
+      setPresence({
+        character_mood: 'LISTENING',
+        presence_label: '응, 듣고 있어.',
+        status: 'LISTENING',
+      });
+    }
+  }
+
+  function createRecognition() {
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      return null;
+    }
+
+    const instance = new SpeechRecognition();
+    instance.lang = 'ko-KR';
+    instance.interimResults = false;
+    instance.maxAlternatives = 1;
+    instance.continuous = false;
+
+    instance.onstart = () => {
+      setListening(true);
+    };
+
+    instance.onresult = (event) => {
+      const result = event.results && event.results[0] && event.results[0][0];
+      const transcriptText = result && result.transcript
+        ? String(result.transcript).trim()
+        : '';
+
+      if (transcriptText) {
+        input.value = transcriptText;
+        sendUtterance(transcriptText);
+        input.value = '';
+      }
+    };
+
+    instance.onerror = (event) => {
+      setListening(false);
+      const code = event && event.error;
+
+      if (code === 'not-allowed' || code === 'service-not-allowed') {
+        appendBubble(
+          'assistant',
+          '마이크 권한이 필요해요. 브라우저 주소창 왼쪽에서 마이크를 허용해 주세요.'
+        );
+        setPresence({
+          character_mood: 'CAUTION',
+          presence_label: MOOD_COPY.CAUTION,
+          status: 'DENY',
+        });
+        return;
+      }
+
+      if (code === 'no-speech') {
+        appendBubble('assistant', '음성이 잘 안 들렸어요. 다시 마이크를 눌러 말해 주세요.');
+        return;
+      }
+
+      if (code !== 'aborted') {
+        appendBubble(
+          'assistant',
+          '지금은 음성 인식을 시작하지 못했어요. 텍스트로도 말씀해 주세요.'
+        );
+      }
+    };
+
+    instance.onend = () => {
+      setListening(false);
+    };
+
+    return instance;
+  }
+
+  async function ensureMicPermission() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      return true;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((track) => track.stop());
+      return true;
+    } catch (error) {
+      appendBubble(
+        'assistant',
+        '마이크 권한이 필요해요. 브라우저에서 마이크 사용을 허용해 주세요.'
+      );
+      setPresence({
+        character_mood: 'CAUTION',
+        presence_label: MOOD_COPY.CAUTION,
+        status: 'DENY',
+      });
+      return false;
+    }
+  }
+
+  async function toggleVoiceInput() {
+    if (listening && recognition) {
+      recognition.stop();
+      setListening(false);
+      return;
+    }
+
+    if (!recognition) {
+      recognition = createRecognition();
+    }
+
+    if (!recognition) {
+      appendBubble(
+        'assistant',
+        '이 브라우저는 음성 입력을 지원하지 않아요. Chrome에서 열어주시면 마이크를 쓸 수 있어요.'
+      );
+      return;
+    }
+
+    const allowed = await ensureMicPermission();
+    if (!allowed) return;
+
+    try {
+      recognition.start();
+    } catch (error) {
+      appendBubble(
+        'assistant',
+        '마이크를 바로 시작하지 못했어요. 잠시 후 다시 눌러 주세요.'
+      );
+      setListening(false);
+    }
+  }
+
+  if (micBtn) {
+    micBtn.addEventListener('click', () => {
+      toggleVoiceInput();
+    });
+  }
+
+  orb.addEventListener('click', () => {
+    toggleVoiceInput();
+  });
+  orb.style.cursor = 'pointer';
+  orb.title = '눌러서 말하기';
+
   setPresence({
     character_mood: 'LISTENING',
-    presence_label: MOOD_COPY.LISTENING,
+    presence_label: '마이크를 눌러 말해 보세요.',
     status: 'IDLE',
   });
   renderProgress([]);

@@ -24,8 +24,8 @@
         <span class="orb-core"></span>
         <span class="orb-ring"></span>
       </div>
-      <p class="presence-label" id="presenceLabel">응, 듣고 있어.</p>
-      <p class="presence-status" id="statusBadge">응, 듣고 있어.</p>
+      <p class="presence-label" id="presenceLabel">마이크를 눌러 말해 보세요.</p>
+      <p class="presence-status" id="statusBadge">마이크를 눌러 말해 보세요.</p>
       <div class="progress-panel" id="progressPanel" hidden></div>
     </section>
 
@@ -38,13 +38,15 @@
         name="utterance"
         type="text"
         autocomplete="off"
-        placeholder="아르카온에게 말해보세요"
-        required
+        placeholder="말하거나 입력해 보세요"
       />
+      <button type="button" id="micBtn" class="mic" aria-label="음성으로 말하기" title="음성으로 말하기">
+        마이크
+      </button>
       <button type="submit" id="sendBtn">보내기</button>
     </form>
 
-    <p class="hint">예: 오늘 일정 알려줘 · 엄마한테 조금 늦는다고 보내줘 · 이 문자 이상한데 봐줘</p>
+    <p class="hint">마이크를 누르면 말할 수 있어요 · 예: 연락처 중복 찾아줘</p>
   </main>
 
   <script src="./app.js"></script>

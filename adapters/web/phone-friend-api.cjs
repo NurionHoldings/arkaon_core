@@ -155,6 +155,17 @@ function buildCards(result) {
     });
   }
 
+  if (result.status === 'WAITING_PERMISSION') {
+    cards.push({
+      type: 'confirm',
+      title: '연락처 읽기 권한',
+      text:
+        result.assistant_text ||
+        '연락처를 읽으려면 접근 권한이 필요해요. 읽기만 하고 수정하거나 삭제하지 않을게요.',
+      actions: ['허용', '나중에'],
+    });
+  }
+
   if (result.scenario === 'MESSAGE_SEND' && result.executed) {
     const message =
       result.capability_result &&
@@ -325,6 +336,7 @@ class PhoneFriendWebApi {
       llmSuggestion: input.llmSuggestion,
       forceAuthority: input.forceAuthority,
       gate_context: input.gate_context,
+      permission_ok: input.permission_ok,
     });
 
     return toViewModel(result);

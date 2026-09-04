@@ -109,8 +109,18 @@
         android:maxLines="2"
         android:padding="12dp"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toStartOf="@id/sendButton"
+        app:layout_constraintEnd_toStartOf="@id/micButton"
         app:layout_constraintStart_toStartOf="parent" />
+
+    <Button
+        android:id="@+id/micButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="8dp"
+        android:text="@string/mic"
+        app:layout_constraintBottom_toBottomOf="@id/utteranceInput"
+        app:layout_constraintEnd_toStartOf="@id/sendButton"
+        app:layout_constraintTop_toTopOf="@id/utteranceInput" />
 
     <Button
         android:id="@+id/sendButton"
