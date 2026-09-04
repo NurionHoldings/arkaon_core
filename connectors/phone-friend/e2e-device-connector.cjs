@@ -23,6 +23,10 @@ const {
   MemoryDocumentConnector,
 } = require('./memory-document-connector.cjs');
 
+const {
+  MemoryContactConnector,
+} = require('./memory-contact-connector.cjs');
+
 function clone(value) {
   if (value === undefined) return undefined;
   return JSON.parse(JSON.stringify(value));
@@ -56,6 +60,10 @@ function pickBackend(skill, backends) {
     s === 'IMAGE_TO_DOCUMENT'
   ) {
     return backends.document;
+  }
+
+  if (s === 'CONTACT_READ') {
+    return backends.contact;
   }
 
   return null;
@@ -96,6 +104,9 @@ class E2eDeviceConnector {
     this.document =
       opts.document || new MemoryDocumentConnector();
 
+    this.contact =
+      opts.contact || new MemoryContactConnector(opts.contactOpts || {});
+
     this.name = 'e2e-device';
   }
 
@@ -121,6 +132,7 @@ class E2eDeviceConnector {
       'phone-friend-messaging': proxy,
       'phone-friend-safety': proxy,
       'phone-friend-document': proxy,
+      'phone-friend-contact': proxy,
       'phone-friend-device': proxy,
     };
   }
@@ -177,6 +189,7 @@ class E2eDeviceConnector {
         ? this.messaging.list()
         : null,
       documents: this.document.list(),
+      contacts: this.contact.list(),
       messaging_send_count: this.messaging.send_count || 0,
       safety_scan_count: this.safety.scan_count || 0,
     });

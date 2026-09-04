@@ -20,12 +20,13 @@
     </header>
 
     <section class="presence" aria-label="아르카온 상태">
-      <div class="orb" id="orb" data-status="IDLE">
+      <div class="orb" id="orb" data-mood="LISTENING" data-status="IDLE">
         <span class="orb-core"></span>
         <span class="orb-ring"></span>
       </div>
-      <p class="presence-label" id="presenceLabel">듣고 있어요</p>
-      <p class="presence-status" id="statusBadge">IDLE</p>
+      <p class="presence-label" id="presenceLabel">응, 듣고 있어.</p>
+      <p class="presence-status" id="statusBadge">응, 듣고 있어.</p>
+      <div class="progress-panel" id="progressPanel" hidden></div>
     </section>
 
     <section class="transcript" id="transcript" aria-live="polite"></section>

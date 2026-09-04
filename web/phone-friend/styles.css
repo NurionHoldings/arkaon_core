@@ -120,21 +120,29 @@ body {
   animation: spinSoft 12s linear infinite;
 }
 
+.orb[data-mood="THINKING"] .orb-core,
 .orb[data-status="CONFIRM"] .orb-core,
+.orb[data-status="CLARIFY"] .orb-core,
 .orb[data-status="HOLD"] .orb-core {
   background:
     radial-gradient(circle at 35% 30%, #ffe2a8, var(--sand) 48%, #8a5a18);
 }
 
+.orb[data-mood="CAUTION"] .orb-core,
 .orb[data-status="WARN"] .orb-core,
 .orb[data-status="DENY"] .orb-core {
   background:
     radial-gradient(circle at 35% 30%, #ffc4b8, var(--danger) 50%, #6d2018);
 }
 
+.orb[data-mood="HAPPY"] .orb-core,
 .orb[data-status="COMPLETE"] .orb-core {
   background:
     radial-gradient(circle at 35% 30%, #b8f0cf, #3cbc78 50%, #145233);
+}
+
+.orb[data-mood="WORKING"] .orb-core {
+  animation: breathe 1.8s ease-in-out infinite;
 }
 
 .presence-label {
@@ -145,10 +153,60 @@ body {
 
 .presence-status {
   margin: 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+  letter-spacing: 0;
+}
+
+.progress-panel {
+  width: min(100%, 360px);
+  margin-top: 4px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid var(--line);
+}
+
+.progress-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.progress-item {
+  display: grid;
+  grid-template-columns: 1.2rem 1fr;
+  gap: 8px;
+  align-items: start;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.progress-item.mark-done {
+  color: var(--ok);
+}
+
+.progress-item.mark-active {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.progress-symbol {
   font-family: var(--font-display);
-  font-size: 0.72rem;
-  letter-spacing: 0.14em;
-  color: var(--sea);
+  text-align: center;
+}
+
+.card-actions.options {
+  flex-wrap: wrap;
+}
+
+.card-actions .option {
+  flex: 1 1 40%;
+  background: var(--foam);
+  color: var(--ink);
 }
 
 .transcript {

@@ -84,6 +84,16 @@ function extractMessageContent(text) {
   const quoted = String(text || '').match(/['"]([^'"]+)['"]/);
   if (quoted) return quoted[1];
 
+  const tell = String(text || '').match(
+    /(?:한테|에게|께)\s*(.+?)(?:라고\s*)?(?:알려|말해|전해)/
+  );
+  if (tell) {
+    return tell[1]
+      .replace(/좀\s*/g, '')
+      .replace(/보내[줘라세요]*$/g, '')
+      .trim();
+  }
+
   const m = String(text || '').match(
     /(?:한테|에게|께)\s*(.+?)(?:라고\s*)?(?:문자|메시지|톡)/
   );
@@ -223,8 +233,13 @@ class MobileIntentRouter {
       });
     }
 
-    // COMMUNICATION / WRITE — 문자/메시지
-    else if (/(문자|메시지|톡)\s*(보내|전송)?/.test(text) || /보내줘/.test(text) && /(문자|메시지)/.test(text)) {
+    // COMMUNICATION / WRITE — 문자/메시지 + paraphrase ("알려줘", "말해놔")
+    else if (
+      /(문자|메시지|톡)\s*(보내|전송)?/.test(text) ||
+      (/보내줘/.test(text) && /(문자|메시지)/.test(text)) ||
+      (/(한테|에게|께)/.test(text) &&
+        /(알려줘|알려\s*줘|말해줘|말해놔|전해줘)/.test(text))
+    ) {
       const recipient = extractRecipient(text);
       const content = extractMessageContent(text);
       const missing = [];
@@ -282,8 +297,11 @@ class MobileIntentRouter {
       });
     }
 
-    // GENERAL / READ — 일정
-    else if (/(일정|스케줄|캘린더)/.test(text) && /(알려|보여|뭐|있)/.test(text)) {
+    // GENERAL / READ — 일정 (+ "오늘 뭐 있지?")
+    else if (
+      (/(일정|스케줄|캘린더)/.test(text) && /(알려|보여|뭐|있)/.test(text)) ||
+      /오늘\s*뭐\s*있/.test(text)
+    ) {
       intent = buildIntent({
         domain: DOMAINS.GENERAL_ASSISTANT,
         action: ACTIONS.READ,

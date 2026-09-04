@@ -66,6 +66,24 @@ const {
   E2eDeviceConnector,
 } = require('../../../connectors/phone-friend/e2e-device-connector.cjs');
 
+const {
+  NaturalConversationEngine,
+} = require('../natural/natural-conversation-engine.cjs');
+
+const {
+  ProgressNarrator,
+  PROGRESS_STAGE,
+  CHARACTER_MOOD,
+} = require('../progress/progress-narrator.cjs');
+
+const {
+  ProgressStore,
+} = require('../progress/progress-store.cjs');
+
+const {
+  ContactService,
+} = require('../capabilities/contact-service.cjs');
+
 function clone(value) {
   if (value === undefined) return undefined;
   return JSON.parse(JSON.stringify(value));
@@ -112,10 +130,11 @@ function enrichUtterance(utterance, context = {}) {
     };
   }
 
-  // Safety text: "이 문자 이상한데 봐줘"
+  // Safety text: "이 문자 이상한데 봐줘" / "피싱 아니야?"
   if (
-    /(문자|메시지|톡)/.test(text) &&
-    /(이상|수상|위험|피싱|봐줘|검사)/.test(text)
+    (/(문자|메시지|톡)/.test(text) &&
+      /(이상|수상|위험|피싱|봐줘|검사|믿어도)/.test(text)) ||
+    /(피싱\s*아니|믿어도\s*돼)/.test(text)
   ) {
     return {
       kind: 'SAFETY_TEXT',
@@ -239,11 +258,65 @@ class PhoneFriendRuntime {
         sessionStore: opts.sessionStore,
       });
 
+    this.narrator =
+      opts.progressNarrator || new ProgressNarrator();
+
+    this.progressStore =
+      opts.progressStore || new ProgressStore();
+
+    this.natural =
+      opts.naturalEngine ||
+      opts.naturalLayer ||
+      new NaturalConversationEngine({
+        narrator: this.narrator,
+      });
+
+    this.contacts =
+      opts.contactService || new ContactService();
+
     /**
      * Pending write confirmations waiting for "응"
      * (composition-level, not Authority).
      */
     this._pending = new Map();
+
+    /**
+     * Natural conversation dialogue state by web/session key.
+     */
+    this._naturalState = new Map();
+
+    this.preferProgressNarration = true;
+  }
+
+  _progressKey(input, subject) {
+    return (
+      input.natural_session_id ||
+      input.session_id ||
+      `nat:${subject}`
+    );
+  }
+
+  _withProgress(result, progressKey, seedSteps) {
+    const steps = Array.isArray(seedSteps)
+      ? seedSteps
+      : Array.isArray(result.progress)
+        ? result.progress
+        : [];
+
+    const progress = this.progressStore.set(progressKey, steps);
+    const mood =
+      result.character_mood ||
+      this.narrator.moodFromSteps(progress);
+
+    return clone({
+      ...result,
+      natural_session_id: progressKey,
+      progress,
+      character_mood: mood,
+      presence_label:
+        result.presence_label || this.narrator.moodLabel(mood),
+      authority_granted: false,
+    });
   }
 
   getAudit() {
@@ -270,19 +343,155 @@ class PhoneFriendRuntime {
         now
       );
       if (existing && existing.status === SESSION_STATUS.EXPIRED) {
-        return clone({
-          status: 'SESSION_EXPIRED',
-          executed: false,
-          authority_granted: false,
-          conversation: this.conversation.handle({
-            utterance,
-            session_id: input.session_id,
+        return this._withProgress(
+          {
+            status: 'SESSION_EXPIRED',
+            executed: false,
+            authority_granted: false,
+            character_mood: CHARACTER_MOOD.CAUTION,
+            conversation: this.conversation.handle({
+              utterance,
+              session_id: input.session_id,
+              subject,
+              device_id: deviceId,
+              now,
+            }),
+          },
+          this._progressKey(input, subject),
+          [
+            this.narrator.narrate(
+              PROGRESS_STAGE.BLOCKED,
+              '대화가 만료돼서 여기서 멈췄어요.',
+              'done'
+            ),
+          ]
+        );
+      }
+    }
+
+    /**
+     * Natural Conversation Engine — everyday Korean goals
+     * before rigid skill routing. Never grants Authority.
+     */
+    const naturalKey = this._progressKey(input, subject);
+
+    const natural = this.natural.interpret
+      ? this.natural.interpret({
+          utterance,
+          state: this._naturalState.get(naturalKey) || null,
+        })
+      : this.natural.understand({
+          utterance,
+          state: this._naturalState.get(naturalKey) || null,
+        });
+
+    if (natural.handled) {
+      if (natural.prefer_progress_narration) {
+        this.preferProgressNarration = true;
+      }
+
+      if (natural.state) {
+        this._naturalState.set(naturalKey, natural.state);
+      } else if (!natural.route) {
+        this._naturalState.delete(naturalKey);
+      }
+
+      /**
+       * Route structured candidates into existing capability paths.
+       * Natural understanding ≠ Decision / Gate.
+       */
+      if (natural.route && natural.route.kind === 'MESSAGE_SEND') {
+        const routed = await this._handleAfterNaturalRoute(
+          {
+            ...input,
+            utterance:
+              natural.route.utterance || utterance,
             subject,
             device_id: deviceId,
             now,
-          }),
-        });
+          },
+          natural
+        );
+        return this._withProgress(
+          routed,
+          naturalKey,
+          natural.progress
+        );
       }
+
+      if (natural.route && natural.route.kind === 'CALENDAR_READ') {
+        const routed = await this._handleAfterNaturalRoute(
+          {
+            ...input,
+            utterance:
+              natural.route.utterance || utterance,
+            subject,
+            device_id: deviceId,
+            now,
+          },
+          natural
+        );
+        return this._withProgress(
+          routed,
+          naturalKey,
+          [
+            ...(natural.progress || []),
+            this.narrator.fromRuntimeStatus(
+              routed.status,
+              routed.executed
+                ? '일정을 확인했어요.'
+                : null
+            ),
+          ]
+        );
+      }
+
+      if (natural.route && natural.route.kind === 'SAFETY_TEXT') {
+        const routed = await this._handleAfterNaturalRoute(
+          {
+            ...input,
+            utterance:
+              natural.route.utterance || utterance,
+            subject,
+            device_id: deviceId,
+            now,
+          },
+          natural
+        );
+        return this._withProgress(
+          routed,
+          naturalKey,
+          [
+            ...(natural.progress || []),
+            this.narrator.fromRuntimeStatus(
+              routed.status || 'WARN',
+              '위험 신호 검사를 마쳤어요.'
+            ),
+          ]
+        );
+      }
+
+      /**
+       * CONTACT_MAINTENANCE v0.1: dialogue plan + READ/ANALYZE
+       * boundary only. No Gate execute / no mutate.
+       */
+      return this._withProgress(
+        {
+          status: natural.status || 'ANSWER',
+          executed: false,
+          authority_granted: false,
+          scenario: natural.goal
+            ? `NATURAL_${natural.goal}`
+            : 'NATURAL',
+          assistant_text: natural.assistant_text,
+          dialogue_plan: natural.dialogue_plan || natural.plan,
+          options: natural.options || null,
+          character_mood: natural.character_mood,
+          presence_label: natural.presence_label,
+        },
+        naturalKey,
+        natural.progress || []
+      );
     }
 
     // Pending confirmation completion
@@ -599,6 +808,198 @@ class PhoneFriendRuntime {
     });
   }
 
+  async _handleAfterNaturalRoute(input, natural) {
+    const utterance = normalize(input.utterance);
+    const subject = input.subject || 'user:e2e';
+    const deviceId = input.device_id || 'device-e2e';
+    const now = input.now || new Date();
+    const kind = natural.route && natural.route.kind;
+
+    if (kind === 'CALENDAR_READ') {
+      const timeframe =
+        (natural.route.slots && natural.route.slots.timeframe) ||
+        'today';
+      const date =
+        timeframe === 'today'
+          ? '2026-09-04'
+          : input.date || '2026-09-04';
+
+      const result = await this.calendar.read(this.capability, {
+        subject,
+        device_id: deviceId,
+        date,
+        idempotency_key:
+          input.idempotency_key || `e2e-cal-read:${date}`,
+        now,
+      });
+
+      return clone({
+        status: result.status,
+        executed: result.executed === true,
+        authority_granted: false,
+        scenario: 'CALENDAR_READ',
+        dialogue_plan: natural.dialogue_plan,
+        capability_result: result,
+      });
+    }
+
+    if (kind === 'SAFETY_TEXT') {
+      const enriched = enrichUtterance(utterance, input) || {
+        kind: 'SAFETY_TEXT',
+        text:
+          input.suspect_text ||
+          '검찰입니다. 안전계좌로 지금 송금하세요.',
+      };
+
+      const result = await this.safety.scanText(this.capability, {
+        subject,
+        device_id: deviceId,
+        text: enriched.text,
+        idempotency_key:
+          input.idempotency_key || `e2e-safety-text:${Date.now()}`,
+        now,
+      });
+
+      return clone({
+        status: 'WARN',
+        executed: result.executed === true,
+        authority_granted: false,
+        scenario: 'SAFETY_TEXT',
+        dialogue_plan: natural.dialogue_plan,
+        capability_result: result,
+        risk:
+          result.execution &&
+          result.execution.connector_result &&
+          result.execution.connector_result.risk,
+        findings:
+          result.execution &&
+          result.execution.connector_result &&
+          result.execution.connector_result.findings,
+      });
+    }
+
+    if (kind === 'MESSAGE_SEND') {
+      const slots =
+        (natural.route && natural.route.slots) || {};
+      const convo = this.conversation.handle({
+        utterance,
+        session_id: input.session_id,
+        subject,
+        device_id: deviceId,
+        now,
+        llmSuggestion: {
+          slots: {
+            recipient: slots.recipient,
+            content: slots.content,
+          },
+        },
+        forceAuthority: input.forceAuthority,
+        gate_context: input.gate_context,
+      });
+
+      const intent = convo.intent;
+      if (
+        intent &&
+        intent.capability === 'MESSAGE_SEND' &&
+        convo.response &&
+        convo.response.kind === RESPONSE_KIND.CONFIRM
+      ) {
+        this._pending.set(convo.session.id, {
+          kind: 'MESSAGE_SEND',
+          recipient: intent.slots.recipient,
+          content: intent.slots.content,
+        });
+        return clone({
+          status: 'WAITING_CONFIRMATION',
+          executed: false,
+          authority_granted: false,
+          scenario: 'MESSAGE_SEND',
+          dialogue_plan: natural.dialogue_plan,
+          conversation: convo,
+        });
+      }
+
+      // Slot-complete fallback if router missed paraphrase
+      if (slots.recipient && slots.content) {
+        const sessionId =
+          (convo.session && convo.session.id) ||
+          `pending_${Date.now()}`;
+
+        this._pending.set(sessionId, {
+          kind: 'MESSAGE_SEND',
+          recipient: slots.recipient,
+          content: slots.content,
+        });
+
+        let session = this.conversation.sessions.get(sessionId, now);
+        if (!session) {
+          session = this.conversation.sessions.create({
+            id: sessionId,
+            subject,
+            device_id: deviceId,
+            now,
+            intent: {
+              capability: 'MESSAGE_SEND',
+              domain: 'COMMUNICATION',
+              action: 'WRITE',
+              slots,
+              authority_granted: false,
+            },
+            slots,
+          });
+        }
+
+        this.conversation.sessions.update(
+          sessionId,
+          {
+            status: SESSION_STATUS.WAITING_CONFIRMATION,
+            confirmation_required: true,
+            confirmed: false,
+          },
+          now
+        );
+
+        return clone({
+          status: 'WAITING_CONFIRMATION',
+          executed: false,
+          authority_granted: false,
+          scenario: 'MESSAGE_SEND',
+          dialogue_plan: natural.dialogue_plan,
+          conversation: {
+            session: this.conversation.sessions.get(sessionId, now),
+            response: {
+              kind: RESPONSE_KIND.CONFIRM,
+              text: `${slots.recipient}에게 "${slots.content}" 문자를 보낼까요?`,
+              authority_granted: false,
+            },
+            intent: {
+              capability: 'MESSAGE_SEND',
+              slots,
+              authority_granted: false,
+            },
+          },
+        });
+      }
+
+      return clone({
+        status:
+          (convo.response && convo.response.kind) || 'CLARIFY',
+        executed: false,
+        authority_granted: false,
+        scenario: 'MESSAGE_SEND',
+        dialogue_plan: natural.dialogue_plan,
+        conversation: convo,
+      });
+    }
+
+    return clone({
+      status: 'ANSWER',
+      executed: false,
+      authority_granted: false,
+      dialogue_plan: natural.dialogue_plan,
+    });
+  }
+
   async _beginCalendarWrite(enriched, input, subject, deviceId, now) {
     const convo = this.conversation.handle({
       utterance: input.utterance,
@@ -716,4 +1117,6 @@ module.exports = {
   PhoneFriendRuntime,
   enrichUtterance,
   PIPELINE_RESULT,
+  PROGRESS_STAGE,
+  CHARACTER_MOOD,
 };

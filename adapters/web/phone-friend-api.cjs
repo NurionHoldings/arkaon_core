@@ -20,6 +20,10 @@ function clone(value) {
 function pickAssistantText(result) {
   if (!result) return '잠시만요. 다시 말씀해 주세요.';
 
+  if (result.assistant_text) {
+    return result.assistant_text;
+  }
+
   if (result.chat && result.chat.text) {
     return result.chat.text;
   }
@@ -75,13 +79,18 @@ function pickAssistantText(result) {
 function normalizeUiStatus(result) {
   const status = String((result && result.status) || '');
 
-  if (status === 'WAITING_CONFIRMATION') return 'CONFIRM';
-  if (status === 'HOLD') return 'HOLD';
+  if (status === 'WAITING_CONFIRMATION' || status === 'WAITING_PERMISSION') {
+    return 'CONFIRM';
+  }
+  if (status === 'CLARIFY') return 'CLARIFY';
+  if (status === 'HOLD' || status === 'CANCELLED') return 'HOLD';
   if (status === 'DENY' || status === 'SESSION_EXPIRED') return 'DENY';
   if (status === 'BLOCKED_BY_SAFETY') return 'HOLD';
   if (status === 'WARN') return 'WARN';
   if (status === 'HANDOFF') return 'HANDOFF';
-  if (result && result.executed === true) return 'COMPLETE';
+  if (status === 'COMPLETE' || (result && result.executed === true)) {
+    return 'COMPLETE';
+  }
   if (status === 'CHAT' || status === 'ANSWER') return 'ANSWER';
   return status || 'ANSWER';
 }
@@ -218,6 +227,24 @@ function buildCards(result) {
     });
   }
 
+  if (result.cards_hint && result.cards_hint.type === 'contact') {
+    cards.push({
+      type: 'contact',
+      title: '연락처 정리 후보',
+      duplicate_group_count: result.cards_hint.duplicate_group_count,
+      duplicate_contact_count: result.cards_hint.duplicate_contact_count,
+      note: '읽기만 했어요. 삭제/합치기는 하지 않았어요.',
+    });
+  }
+
+  if (Array.isArray(result.options) && result.options.length) {
+    cards.push({
+      type: 'options',
+      title: '이렇게 도와드릴까요?',
+      options: result.options,
+    });
+  }
+
   return cards;
 }
 
@@ -227,10 +254,21 @@ function toViewModel(result) {
       result.conversation &&
       result.conversation.session &&
       result.conversation.session.id) ||
+    (result && result.natural_session_id) ||
     null;
+
+  const progress = Array.isArray(result && result.progress)
+    ? result.progress
+    : [];
+
+  const mood =
+    (result && result.character_mood) ||
+    (progress.length ? progress[progress.length - 1].mood : 'LISTENING');
 
   return clone({
     session_id: sessionId,
+    natural_session_id:
+      (result && result.natural_session_id) || sessionId,
     status: normalizeUiStatus(result),
     scenario: (result && result.scenario) || null,
     assistant_text: pickAssistantText(result),
@@ -240,6 +278,10 @@ function toViewModel(result) {
      */
     authority_granted: false,
     cards: buildCards(result),
+    progress,
+    character_mood: mood,
+    presence_label:
+      (result && result.presence_label) || null,
     raw_status: (result && result.status) || null,
   });
 }
@@ -268,6 +310,7 @@ class PhoneFriendWebApi {
     const result = await this.runtime.handle({
       utterance,
       session_id: input.session_id || null,
+      natural_session_id: input.natural_session_id || null,
       subject: input.subject || 'user:web',
       device_id: input.device_id || 'web-device',
       filename: input.filename,

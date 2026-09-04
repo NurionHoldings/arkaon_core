@@ -8,26 +8,63 @@
   const orb = document.getElementById('orb');
   const presenceLabel = document.getElementById('presenceLabel');
   const statusBadge = document.getElementById('statusBadge');
+  const progressPanel = document.getElementById('progressPanel');
 
   let sessionId = null;
+  let naturalSessionId = null;
 
-  const STATUS_COPY = {
-    IDLE: '듣고 있어요',
-    ANSWER: '답하고 있어요',
-    CONFIRM: '확인이 필요해요',
-    HOLD: '잠시 보류했어요',
-    WARN: '주의가 필요해요',
-    DENY: '지금은 어려워요',
-    COMPLETE: '완료했어요',
-    HANDOFF: '전문 축으로 연결해요',
-    CLARIFY: '조금 더 알려주세요',
+  const MOOD_COPY = {
+    LISTENING: '응, 듣고 있어.',
+    THINKING: '잠깐만, 확인해볼게.',
+    WORKING: '지금 살펴보고 있어.',
+    CAUTION: '이건 조심해야 할 것 같아.',
+    HAPPY: '다 했어.',
+    SLEEP: '필요할 때 불러줘.',
   };
 
-  function setStatus(status) {
-    const key = status || 'IDLE';
-    orb.dataset.status = key;
-    statusBadge.textContent = key;
-    presenceLabel.textContent = STATUS_COPY[key] || '듣고 있어요';
+  function setPresence(data) {
+    const mood = (data && data.character_mood) || 'LISTENING';
+    const label =
+      (data && data.presence_label) ||
+      MOOD_COPY[mood] ||
+      MOOD_COPY.LISTENING;
+
+    orb.dataset.mood = mood;
+    orb.dataset.status = (data && data.status) || 'IDLE';
+    presenceLabel.textContent = label;
+    statusBadge.textContent = label;
+    statusBadge.hidden = false;
+  }
+
+  function renderProgress(steps) {
+    if (!progressPanel) return;
+    progressPanel.innerHTML = '';
+
+    if (!Array.isArray(steps) || !steps.length) {
+      progressPanel.hidden = true;
+      return;
+    }
+
+    progressPanel.hidden = false;
+    const list = document.createElement('ul');
+    list.className = 'progress-list';
+
+    steps.forEach((step) => {
+      const li = document.createElement('li');
+      li.className = `progress-item mark-${step.mark || 'pending'}`;
+      const symbol = document.createElement('span');
+      symbol.className = 'progress-symbol';
+      symbol.textContent =
+        step.symbol ||
+        (step.mark === 'done' ? '✓' : step.mark === 'active' ? '●' : '○');
+      const text = document.createElement('span');
+      text.className = 'progress-text';
+      text.textContent = step.text || '';
+      li.append(symbol, text);
+      list.appendChild(li);
+    });
+
+    progressPanel.appendChild(list);
   }
 
   function appendBubble(role, text) {
@@ -86,9 +123,33 @@
       el.appendChild(actions);
     }
 
+    if (card.type === 'options' && Array.isArray(card.options)) {
+      const actions = document.createElement('div');
+      actions.className = 'card-actions options';
+      card.options.forEach((opt) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'option';
+        btn.textContent = opt.label || opt.id;
+        btn.addEventListener('click', () =>
+          sendUtterance(opt.label || opt.id)
+        );
+        actions.appendChild(btn);
+      });
+      el.appendChild(actions);
+    }
+
     if (card.type === 'message') {
       const p = document.createElement('p');
       p.textContent = `${card.to || ''}에게: ${card.content || ''}`;
+      el.appendChild(p);
+    }
+
+    if (card.type === 'contact') {
+      const p = document.createElement('p');
+      p.textContent =
+        card.note ||
+        `중복 그룹 ${card.duplicate_group_count || 0}개`;
       el.appendChild(p);
     }
 
@@ -133,7 +194,11 @@
     if (!utterance) return;
 
     appendBubble('user', utterance);
-    setStatus('ANSWER');
+    setPresence({
+      character_mood: 'THINKING',
+      presence_label: MOOD_COPY.THINKING,
+      status: 'THINKING',
+    });
     sendBtn.disabled = true;
 
     try {
@@ -143,6 +208,7 @@
         body: JSON.stringify({
           utterance,
           session_id: sessionId,
+          natural_session_id: naturalSessionId,
           subject: 'user:web',
           device_id: 'web-browser',
         }),
@@ -155,12 +221,20 @@
       }
 
       sessionId = data.session_id || sessionId;
-      setStatus(data.status || 'ANSWER');
+      naturalSessionId =
+        data.natural_session_id || naturalSessionId || sessionId;
+
+      setPresence(data);
+      renderProgress(data.progress || []);
       appendBubble('assistant', data.assistant_text || '응답을 받았어요.');
 
       (data.cards || []).forEach(appendCard);
     } catch (error) {
-      setStatus('DENY');
+      setPresence({
+        character_mood: 'CAUTION',
+        presence_label: MOOD_COPY.CAUTION,
+        status: 'DENY',
+      });
       appendBubble(
         'assistant',
         '지금은 서버에 연결하지 못했어요. Netlify Function이 켜져 있는지 확인해 주세요.'
@@ -179,6 +253,11 @@
     sendUtterance(value);
   });
 
-  setStatus('IDLE');
+  setPresence({
+    character_mood: 'LISTENING',
+    presence_label: MOOD_COPY.LISTENING,
+    status: 'IDLE',
+  });
+  renderProgress([]);
   input.focus();
 })();
