@@ -340,10 +340,23 @@ body {
 }
 
 .composer button.mic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: var(--foam);
   color: var(--sea-deep);
-  min-width: 72px;
+  width: 46px;
+  min-width: 46px;
+  height: 46px;
+  padding: 0;
   animation: mic-nudge 2.4s ease-in-out infinite;
+}
+
+.composer button.mic .mic-icon {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+  display: block;
 }
 
 .composer button.mic[aria-pressed="true"] {

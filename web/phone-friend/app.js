@@ -277,7 +277,11 @@
     listening = active;
     if (micBtn) {
       micBtn.setAttribute('aria-pressed', active ? 'true' : 'false');
-      micBtn.textContent = active ? '듣는 중' : '마이크';
+      micBtn.setAttribute(
+        'aria-label',
+        active ? '듣는 중, 눌러서 중지' : '음성으로 말하기'
+      );
+      micBtn.title = active ? '듣는 중' : '음성으로 말하기';
     }
     if (active) {
       setPresence({

@@ -112,12 +112,16 @@
         app:layout_constraintEnd_toStartOf="@id/micButton"
         app:layout_constraintStart_toStartOf="parent" />
 
-    <Button
+    <ImageButton
         android:id="@+id/micButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
         android:layout_marginEnd="8dp"
-        android:text="@string/mic"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/mic"
+        android:padding="10dp"
+        android:scaleType="centerInside"
+        android:src="@drawable/ic_mic"
         app:layout_constraintBottom_toBottomOf="@id/utteranceInput"
         app:layout_constraintEnd_toStartOf="@id/sendButton"
         app:layout_constraintTop_toTopOf="@id/utteranceInput" />
