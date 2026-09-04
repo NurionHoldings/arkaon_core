@@ -327,8 +327,9 @@ console.log('▸ TC-11: Decision.required_gates 해석');
   assert(
     decision.required_gates.includes(REQUIRED_GATES.IDENTITY) &&
       decision.required_gates.includes(REQUIRED_GATES.CONSENT) &&
-      decision.required_gates.includes(REQUIRED_GATES.BIOMETRIC_ASSERTION),
-    '송금 Decision이 Identity+Consent+Bio 요구'
+      decision.required_gates.includes(REQUIRED_GATES.BIOMETRIC_ASSERTION) &&
+      decision.required_gates.includes(REQUIRED_GATES.AUTHORITY),
+    '송금 Decision이 Identity+Consent+Bio+Authority 요구'
   );
 }
 

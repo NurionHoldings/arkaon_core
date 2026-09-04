@@ -158,13 +158,14 @@ console.log('▸ TC-6: 송금 → IDENTITY_CONSENT_BIO');
   );
   assert(
     d.execution_mode === EXECUTION_MODE.IDENTITY_CONSENT_BIO,
-    'Identity+Consent+Bio'
+    'Identity+Consent+Bio+Authority'
   );
   assert(
     d.required_gates.includes(REQUIRED_GATES.IDENTITY) &&
       d.required_gates.includes(REQUIRED_GATES.CONSENT) &&
-      d.required_gates.includes(REQUIRED_GATES.BIOMETRIC_ASSERTION),
-    '3개 게이트 모두 필요'
+      d.required_gates.includes(REQUIRED_GATES.BIOMETRIC_ASSERTION) &&
+      d.required_gates.includes(REQUIRED_GATES.AUTHORITY),
+    '4개 게이트 모두 필요 (AUTHORITY 포함)'
   );
 }
 
@@ -317,6 +318,10 @@ console.log('▸ TC-12: privacy share → identity gates');
     d.execution_mode === EXECUTION_MODE.IDENTITY_CONSENT_BIO,
     'PRIVACY SHARE는 강한 게이트'
   );
+  assert(
+    d.required_gates.includes(REQUIRED_GATES.AUTHORITY),
+    'PRIVACY SHARE에 AUTHORITY 포함'
+  );
 }
 
 console.log('▸ TC-13: legal execute → CRITICAL path');
@@ -332,6 +337,10 @@ console.log('▸ TC-13: legal execute → CRITICAL path');
   assert(
     d.execution_mode === EXECUTION_MODE.IDENTITY_CONSENT_BIO,
     'LEGAL EXECUTE 강한 게이트'
+  );
+  assert(
+    d.required_gates.includes(REQUIRED_GATES.AUTHORITY),
+    'LEGAL EXECUTE에 AUTHORITY 포함'
   );
 }
 

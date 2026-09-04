@@ -66,8 +66,11 @@ const REVERSIBILITY = Object.freeze({
  * AUTO                  — 저위험·가역·읽기형 자동 수행 가능
  * POLICY_CHECK          — 사용자 정책/설정 확인 필요
  * USER_APPROVAL         — 명시적 사용자 승인 필요
- * IDENTITY_CONSENT_BIO  — 신원 + 동의 + 생체 assertion 게이트
+ * IDENTITY_CONSENT_BIO  — 신원 + 동의 + 생체 + Authority 게이트
  * DENY                  — 현재 컨텍스트에서 거부
+ *
+ * IDENTITY_CONSENT_BIO 모드의 required_gates는 반드시 AUTHORITY를 포함한다.
+ * ActionRuntime HIGH/CRITICAL 계약과 정합한다.
  */
 const EXECUTION_MODE = Object.freeze({
   AUTO: 'AUTO',
@@ -84,7 +87,15 @@ const REQUIRED_GATES = Object.freeze({
   IDENTITY: 'IDENTITY',
   CONSENT: 'CONSENT',
   BIOMETRIC_ASSERTION: 'BIOMETRIC_ASSERTION',
+  AUTHORITY: 'AUTHORITY',
 });
+
+const SECURE_GATES = Object.freeze([
+  REQUIRED_GATES.IDENTITY,
+  REQUIRED_GATES.CONSENT,
+  REQUIRED_GATES.BIOMETRIC_ASSERTION,
+  REQUIRED_GATES.AUTHORITY,
+]);
 
 const DEFAULT_MAX_DECISIONS = 200;
 
@@ -276,11 +287,14 @@ function summarizeCognitiveContext(beliefs, predictions) {
 /**
  * 실행 모드와 필수 게이트를 결정합니다.
  * Confidence는 여기서 권한을 열지 않습니다.
+ *
+ * HIGH/CRITICAL 실행 경로는 항상 AUTHORITY를 포함한다.
+ * ActionRuntime이 HIGH/CRITICAL에서 AUTHORITY proof를 요구하기 때문이다.
  */
 function resolveExecution(intent, cognitive) {
   const { domain, action, risk, reversibility } = intent;
 
-  // FINANCIAL transfer / LEGAL execute / CRITICAL → identity + consent + bio
+  // 고위험 보안 경로: Identity + Consent + Biometric + Authority
   if (
     risk === RISK.CRITICAL ||
     (domain === DOMAINS.FINANCIAL && action === ACTIONS.TRANSFER) ||
@@ -288,27 +302,28 @@ function resolveExecution(intent, cognitive) {
     (domain === DOMAINS.LEGAL && action === ACTIONS.EXECUTE) ||
     (domain === DOMAINS.IDENTITY && action === ACTIONS.AUTHENTICATE) ||
     (domain === DOMAINS.PRIVACY && action === ACTIONS.SHARE) ||
-    (domain === DOMAINS.PRIVACY && action === ACTIONS.DELETE)
+    (domain === DOMAINS.PRIVACY && action === ACTIONS.DELETE) ||
+    (domain === DOMAINS.SAFETY && action === ACTIONS.EXECUTE)
   ) {
     return {
       execution_mode: EXECUTION_MODE.IDENTITY_CONSENT_BIO,
-      required_gates: [
-        REQUIRED_GATES.IDENTITY,
-        REQUIRED_GATES.CONSENT,
-        REQUIRED_GATES.BIOMETRIC_ASSERTION,
-      ],
+      required_gates: [...SECURE_GATES],
       auto_allowed: false,
     };
   }
 
-  // HIGH risk or irreversible write-like → user approval
+  // HIGH risk or irreversible → approval + authority
+  // ActionRuntime HIGH/CRITICAL 계약과 정합: AUTHORITY proof 필수
   if (
     risk === RISK.HIGH ||
     reversibility === REVERSIBILITY.IRREVERSIBLE
   ) {
     return {
       execution_mode: EXECUTION_MODE.USER_APPROVAL,
-      required_gates: [REQUIRED_GATES.APPROVAL],
+      required_gates: [
+        REQUIRED_GATES.APPROVAL,
+        REQUIRED_GATES.AUTHORITY,
+      ],
       auto_allowed: false,
     };
   }
@@ -627,6 +642,7 @@ module.exports = {
   REVERSIBILITY,
   EXECUTION_MODE,
   REQUIRED_GATES,
+  SECURE_GATES,
   DEFAULT_MATRIX,
   clamp01,
   resolveDefaults,
