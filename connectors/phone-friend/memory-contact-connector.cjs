@@ -1,10 +1,19 @@
 'use strict';
 
 /**
- * MemoryContactConnector
+ * MemoryContactConnector v0.1
  * ─────────────────────────────────────────────────
- * In-memory contact book for CONTACT_READ scans.
- * Does not delete/merge contacts.
+ *
+ * Android ContactsContract adapter 전
+ * READ contract 검증용 in-memory connector.
+ *
+ * 지원:
+ *   CONTACT_READ
+ *
+ * 미지원:
+ *   CONTACT_MERGE
+ *   CONTACT_DELETE
+ *   CONTACT_WRITE
  */
 
 function clone(value) {
@@ -13,19 +22,42 @@ function clone(value) {
 }
 
 const DEFAULT_CONTACTS = [
-  { id: 'c1', name: '김사장', phone: '010-1111-2222', city: '서울' },
-  { id: 'c2', name: '김 사장', phone: '010-1111-2222', city: '서울' },
-  { id: 'c3', name: '엄마', phone: '010-3333-4444', city: null },
-  { id: 'c4', name: '어머니', phone: '010-3333-4444', city: null },
-  { id: 'c5', name: '', phone: '010-5555-6666', city: null },
-  { id: 'c6', name: '미저장', phone: '010-5555-6666', city: null },
-  { id: 'c7', name: '약국', phone: '044-123-4567', city: '세종' },
-  { id: 'c8', name: '세종약국', phone: '044-123-4567', city: '세종' },
-  { id: 'c9', name: '친구A', phone: '010-7777-8888', last_contact_days: 400 },
-  { id: 'c10', name: '친구A', phone: '010-7777-9999', last_contact_days: 10 },
-  { id: 'c11', name: '동생', phone: '010-2222-3333', city: null },
-  { id: 'c12', name: '남동생', phone: '010-2222-3333', city: null },
-  { id: 'c13', name: '학교', phone: '042-000-1111', city: '대전' },
+  {
+    id: 'contact-1',
+    name: '홍길동',
+    phones: ['010-1234-5678'],
+    last_contacted_at: '2026-08-30T10:00:00+09:00',
+  },
+  {
+    id: 'contact-2',
+    name: '홍길동',
+    phones: ['01012345678'],
+    last_contacted_at: '2026-08-31T10:00:00+09:00',
+  },
+  {
+    id: 'contact-3',
+    name: '김철수(회사)',
+    phones: ['+82 10-9999-1111'],
+    last_contacted_at: '2026-09-01T10:00:00+09:00',
+  },
+  {
+    id: 'contact-4',
+    name: '김철수',
+    phones: ['010-9999-1111'],
+    last_contacted_at: '2026-08-29T10:00:00+09:00',
+  },
+  {
+    id: 'contact-5',
+    name: '',
+    phones: ['010-5555-7777'],
+    last_contacted_at: null,
+  },
+  {
+    id: 'contact-6',
+    name: '오래된 거래처',
+    phones: ['010-3333-4444'],
+    last_contacted_at: '2024-01-01T09:00:00+09:00',
+  },
 ];
 
 class MemoryContactConnector {
@@ -33,6 +65,13 @@ class MemoryContactConnector {
     this._contacts = Array.isArray(opts.contacts)
       ? clone(opts.contacts)
       : clone(DEFAULT_CONTACTS);
+
+    this.read_count = 0;
+
+    /**
+     * 현실 변경 카운트는 v0.1에서 항상 0이어야 한다.
+     */
+    this.mutation_count = 0;
   }
 
   list() {
@@ -40,65 +79,59 @@ class MemoryContactConnector {
   }
 
   async execute(action) {
-    const skill = action && action.skill;
-    const payload = clone((action && action.payload) || {});
+    const skill = String((action && action.skill) || '');
 
     if (skill !== 'CONTACT_READ') {
-      return { ok: false, error: 'contact_skill_not_bound' };
+      return {
+        ok: false,
+        error: 'contact_mutation_not_supported_v0_1',
+        mutation_performed: false,
+        authority_granted: false,
+      };
     }
+
+    const payload = clone(action.payload || {});
 
     if (payload.mutate === true) {
       return {
         ok: false,
-        error: 'contact_mutation_forbidden_in_read_scan',
-        deleted: false,
-        merged: false,
+        error: 'contact_read_cannot_mutate',
+        mutation_performed: false,
+        authority_granted: false,
       };
     }
 
-    const rows = this.list();
-    const byPhone = new Map();
-
-    for (const row of rows) {
-      const phone = String(row.phone || '').trim();
-      if (!phone) continue;
-      if (!byPhone.has(phone)) byPhone.set(phone, []);
-      byPhone.get(phone).push(row);
-    }
-
-    const duplicateGroups = [];
-    for (const [phone, group] of byPhone.entries()) {
-      if (group.length >= 2) {
-        duplicateGroups.push({
-          phone,
-          contacts: group,
-        });
-      }
-    }
+    this.read_count += 1;
 
     return {
       ok: true,
-      op: 'scan_duplicates',
-      duplicate_group_count: duplicateGroups.length,
-      duplicate_contact_count: duplicateGroups.reduce(
-        (sum, group) => sum + group.contacts.length,
-        0
-      ),
-      groups: clone(duplicateGroups),
-      mutated: false,
-      deleted: false,
-      merged: false,
+      contacts: this.list(),
+      count: this._contacts.length,
+      permission: 'READ_ONLY',
+      mutation_performed: false,
       authority_granted: false,
     };
   }
 
   async verify(action, result) {
     return {
-      ok: Boolean(result && result.ok === true && result.mutated === false),
-      verified: 'contact_read_scan_completed',
-      mutated: false,
+      ok: Boolean(
+        action &&
+          action.skill === 'CONTACT_READ' &&
+          result &&
+          Array.isArray(result.contacts) &&
+          result.mutation_performed === false
+      ),
+      verified: 'contact_read_completed',
+      mutation_verified: false,
+      authority_granted: false,
     };
   }
+
+  /**
+   * rollback이 필요할 일은 변경이 없으므로
+   * rollback은 지원하지 않는다.
+   */
 }
 
 module.exports = {

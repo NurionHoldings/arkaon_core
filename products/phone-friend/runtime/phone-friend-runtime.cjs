@@ -84,6 +84,15 @@ const {
   ContactService,
 } = require('../capabilities/contact-service.cjs');
 
+const {
+  ContactAnalyzer,
+  CONTACT_METHOD,
+} = require('../contacts/contact-analyzer.cjs');
+
+const {
+  MemoryContactConnector,
+} = require('../../../connectors/phone-friend/memory-contact-connector.cjs');
+
 function clone(value) {
   if (value === undefined) return undefined;
   return JSON.parse(JSON.stringify(value));
@@ -271,8 +280,23 @@ class PhoneFriendRuntime {
         narrator: this.narrator,
       });
 
+    this.contactAnalyzer =
+      opts.contactAnalyzer || new ContactAnalyzer();
+
+    this.contactConnector =
+      opts.contactConnector ||
+      new MemoryContactConnector(opts.contact || {});
+
+    this.executions.registerConnector(
+      'phone-friend-contact',
+      this.contactConnector
+    );
+
     this.contacts =
-      opts.contactService || new ContactService();
+      opts.contactService ||
+      new ContactService({
+        analyzer: this.contactAnalyzer,
+      });
 
     /**
      * Pending write confirmations waiting for "응"
@@ -472,8 +496,88 @@ class PhoneFriendRuntime {
       }
 
       /**
-       * CONTACT_MAINTENANCE v0.1: dialogue plan + READ/ANALYZE
-       * boundary only. No Gate execute / no mutate.
+       * CONTACT_MAINTENANCE v0.1:
+       * dialogue plan → CONTACT_READ → ANALYZE → PROPOSE
+       * No MERGE / DELETE. No Authority.
+       */
+      const contactPlan = natural.dialogue_plan || natural.plan;
+      const contactMethodReady =
+        natural.goal === 'CONTACT_MAINTENANCE' &&
+        contactPlan &&
+        contactPlan.slots &&
+        contactPlan.slots.method &&
+        (contactPlan.status === 'READY_FOR_CAPABILITY' ||
+          contactPlan.status === 'WAITING_PERMISSION');
+
+      if (contactMethodReady) {
+        const method =
+          contactPlan.slots.method ||
+          (natural.state && natural.state.method) ||
+          CONTACT_METHOD.DUPLICATES;
+
+        const proposal = await this.contacts.propose(this.capability, {
+          subject,
+          device_id: deviceId,
+          method,
+          connector: 'phone-friend-contact',
+          idempotency_key:
+            input.idempotency_key ||
+            `contact-propose:${subject}:${method}`,
+          /**
+           * Web/Memory prototype에서는 true 가능.
+           * 실제 Android에서는 OS permission 결과로 대체.
+           */
+          permission_ok: input.permission_ok === true,
+          gate_context: input.gate_context || {},
+          now,
+        });
+
+        const candidateCount =
+          proposal && proposal.analysis
+            ? proposal.analysis.candidate_count
+            : 0;
+
+        const needsPermission =
+          proposal && proposal.executed !== true;
+
+        return this._withProgress(
+          {
+            status: proposal.status,
+            executed: proposal.executed === true,
+            authority_granted: false,
+            scenario: 'CONTACT_MAINTENANCE',
+            assistant_text: needsPermission
+              ? '연락처를 읽으려면 접근 권한이 필요해요. 허용해주시면 읽기만 해서 정리 후보를 찾아볼게요. 아직 합치거나 삭제하지 않아요.'
+              : candidateCount > 0
+                ? `${candidateCount}개의 정리 후보를 찾았어요. 아직 합치거나 삭제한 연락처는 없어요.`
+                : '지금 기준으로 정리 후보를 찾지 못했어요. 연락처는 변경하지 않았어요.',
+            dialogue_plan: contactPlan,
+            contact_result: proposal,
+            proposals: proposal.proposals || [],
+            mutated: false,
+          },
+          naturalKey,
+          [
+            ...(natural.progress || []),
+            this.narrator.narrate(
+              PROGRESS_STAGE.ANALYZING,
+              '연락처의 번호와 이름을 비교하고 있어요.',
+              'done'
+            ),
+            this.narrator.narrate(
+              PROGRESS_STAGE.COMPLETE,
+              candidateCount > 0
+                ? `${candidateCount}개의 후보를 찾았어요. 아직 변경하지 않았어요.`
+                : '분석을 마쳤어요. 연락처는 변경하지 않았어요.',
+              'done'
+            ),
+          ]
+        );
+      }
+
+      /**
+       * CONTACT_MAINTENANCE clarify / progress-only turns
+       * stay on dialogue plan without Gate execute.
        */
       return this._withProgress(
         {
