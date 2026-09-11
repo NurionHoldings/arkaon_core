@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Arkaon" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#0F6F76</item>
+        <item name="colorPrimaryVariant">#0A4F55</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSecondary">#2BB7A8</item>
+        <item name="android:statusBarColor">#0A4F55</item>
+        <item name="android:navigationBarColor">#F3F7F8</item>
+        <item name="android:windowBackground">#F3F7F8</item>
+    </style>
+</resources>
