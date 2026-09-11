@@ -1,0 +1,17 @@
+{
+    "order":  2,
+    "product":  "ARKAON-CORE",
+    "root":  "D:\\ARKAON-CORE-v0.1",
+    "mode":  "core-meta",
+    "api_base":  "/api/arkaon/participation",
+    "api_host":  "netlify_or_package",
+    "applied_at":  "2026-09-11T13:11:21.3076638+09:00",
+    "actions":  [
+                    "rule",
+                    "contract",
+                    "host_profile",
+                    "phase_a_doc",
+                    "core_policy_pack"
+                ],
+    "live_gate_wired":  false
+}
